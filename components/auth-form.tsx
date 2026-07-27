@@ -34,6 +34,15 @@ export function AuthForm({ mode }: { mode: "sign-in" | "sign-up" }) {
       options: {
         redirectTo: `${window.location.origin}/auth/callback?next=/circle`,
         skipBrowserRedirect: inIframe,
+        queryParams: {
+          // Without this, Google silently reuses whichever account is already
+          // signed in to the browser and never shows a chooser. Someone trying
+          // to sign in with a DIFFERENT email lands back in their previous
+          // account and sees that account's bonds on a supposedly new profile.
+          // Forcing the chooser makes "use another email" actually work, and
+          // makes signing out mean something.
+          prompt: "select_account",
+        },
       },
     })
     if (error) {

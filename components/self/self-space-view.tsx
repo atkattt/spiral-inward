@@ -176,6 +176,9 @@ function GoogleSignInLink() {
       options: {
         redirectTo: `${window.location.origin}/auth/callback?next=/self`,
         skipBrowserRedirect: inIframe,
+        // Force Google's account chooser instead of silently reusing the
+        // browser's active Google session — see the note in auth-form.tsx.
+        queryParams: { prompt: "select_account" },
       },
     })
     if (error) {
