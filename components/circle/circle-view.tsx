@@ -103,14 +103,16 @@ export function CircleView({
 
     if (guest) {
       document.cookie = "spiral_guest=; Max-Age=0; path=/"
-      router.push("/")
-      router.refresh()
+      // HARD navigation, not router.push: the SpiralProvider lives in the
+      // root layout, so a soft navigation would carry the session's reads,
+      // reflection points, and the grown self avatar straight through to the
+      // next visit. A full reload resets every in-memory provider.
+      window.location.href = "/"
       return
     }
     const supabase = createClient()
     await supabase.auth.signOut()
-    router.push("/")
-    router.refresh()
+    window.location.href = "/"
   }
 
   return (

@@ -2,10 +2,14 @@
 
 import { useState } from "react"
 import Link from "next/link"
-import { useRouter } from "next/navigation"
 import { ArrowLeft } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
 import { deleteAccount } from "@/app/actions/account"
+import {
+  BIRTH_DATA_KEY,
+  BIRTH_NORMALIZED_KEY,
+  CHART_KEY,
+} from "@/lib/birth-data"
 import { Starfield } from "@/components/starfield"
 import { Button } from "@/components/ui/button"
 
@@ -22,7 +26,6 @@ export function ProfileView({
   birthTime: string | null
   birthPlace: string | null
 }) {
-  const router = useRouter()
 
   const [newEmail, setNewEmail] = useState("")
   const [emailFeedback, setEmailFeedback] = useState<Feedback>(null)
@@ -83,11 +86,26 @@ export function ProfileView({
     setConfirmPassword("")
   }
 
+  // Leaving must be a HARD navigation (window.location, not router.push):
+  // the SpiralProvider lives in the root layout, so soft navigation would
+  // carry this session's reads and the grown self avatar into the next
+  // visit. Also clear the onboarding ritual's stashed birth data + chart.
+  function clearLocalStash() {
+    try {
+      for (const key of [BIRTH_DATA_KEY, BIRTH_NORMALIZED_KEY, CHART_KEY]) {
+        localStorage.removeItem(key)
+        sessionStorage.removeItem(key)
+      }
+    } catch {
+      // storage unavailable (private mode) — nothing stashed to clear.
+    }
+  }
+
   async function handleSignOut() {
+    clearLocalStash()
     const supabase = createClient()
     await supabase.auth.signOut()
-    router.push("/")
-    router.refresh()
+    window.location.href = "/"
   }
 
   async function handleDelete() {
@@ -100,10 +118,10 @@ export function ProfileView({
       return
     }
     // Data is gone and the server cleared the session; also clear the client.
+    clearLocalStash()
     const supabase = createClient()
     await supabase.auth.signOut()
-    router.push("/")
-    router.refresh()
+    window.location.href = "/"
   }
 
   return (
