@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
 import { matchFragments, type Chart } from "@/lib/matcher"
+import { MAJOR_WEIGHT, sectionFor } from "@/lib/spiral/sections"
 import type { FragmentRow } from "@/lib/self/reads-data"
 
 // ---------------------------------------------------------------------------
@@ -28,6 +29,53 @@ export type LensState = {
    * the frontier and is shown as "coming"; we never unlock past it.
    */
   next: { slug: string; name: string } | null
+  /**
+   * Present when the NEXT lens unlocks by the section-clear rule
+   * (vedic_deep): how many of the chart's constellations are cleared.
+   */
+  clearedProgress: { done: number; total: number } | null
+}
+
+/** The lens that unlocks by clearing every constellation, not a threshold. */
+export const VEDIC_DEEP_SLUG = "vedic_deep"
+
+/**
+ * Section-clear progress across a set of matched fragments, using the
+ * EXISTING clear rule (mirrors the spiral's section grouping in
+ * lib/spiral/sections.ts — sectionFor + the weight>=7 major):
+ *   - a section with a major: its major answered + 2 of its minors
+ *     (or every minor it has, when it has fewer than 2)
+ *   - a section with no matched major: 2 minors answered
+ *     (or everything it has, when it has fewer than 2)
+ */
+export function sectionClearProgress(
+  matched: FragmentRow[],
+  respondedIds: ReadonlySet<string>,
+): { done: number; total: number } {
+  const groups = new Map<string, FragmentRow[]>()
+  for (const f of matched) {
+    const key = sectionFor(f.section, f.trigger_type, f.condition)
+    const g = groups.get(key)
+    if (g) g.push(f)
+    else groups.set(key, [f])
+  }
+
+  let done = 0
+  for (const frags of groups.values()) {
+    const sorted = [...frags].sort((a, b) => (b.weight ?? 0) - (a.weight ?? 0))
+    const majorIdx = sorted.findIndex((f) => (f.weight ?? 0) >= MAJOR_WEIGHT)
+    const major = majorIdx === -1 ? null : sorted[majorIdx]
+    const minors = major ? sorted.filter((f) => f !== major) : sorted
+
+    const majorOk = major ? respondedIds.has(String(major.id)) : true
+    const answeredMinors = minors.filter((f) =>
+      respondedIds.has(String(f.id)),
+    ).length
+    const requiredMinors = Math.min(2, minors.length)
+
+    if (majorOk && answeredMinors >= requiredMinors) done++
+  }
+  return { done, total: groups.size }
 }
 
 /** The lens a fragment belongs to; legacy rows without one are vedic. */
@@ -114,11 +162,23 @@ export function computeLensState(
   if (!current) return null
   const inLens = matchedAll.filter((f) => lensOf(f) === current.slug)
   const answered = inLens.filter((f) => responses[String(f.id)]).length
+
+  // vedic_deep unlocks by CLEARING every constellation of the current lens,
+  // not by a response threshold — surface that progress for the UI.
+  let clearedProgress: LensState["clearedProgress"] = null
+  if (next?.slug === VEDIC_DEEP_SLUG && inLens.length > 0) {
+    const respondedIds = new Set(
+      inLens.filter((f) => responses[String(f.id)]).map((f) => String(f.id)),
+    )
+    clearedProgress = sectionClearProgress(inLens, respondedIds)
+  }
+
   return {
     current: { slug: current.slug, name: current.name },
     answered,
     total: inLens.length,
     next: next ? { slug: next.slug, name: next.name } : null,
+    clearedProgress,
   }
 }
 
@@ -160,14 +220,30 @@ export async function maybeUnlockNextLens(
     if (matched.length === 0) return // frontier lens — never unlock past it
 
     const ids = matched.map((f) => String(f.id))
-    const { count } = await supabase
+    const { data: responseRows } = await supabase
       .from("read_responses")
-      .select("id", { count: "exact", head: true })
+      .select("fragment_id")
       .eq("profile_id", profileId)
       .in("fragment_id", ids)
-    const answered = count ?? 0
+    const respondedIds = new Set(
+      (responseRows ?? []).map((r) =>
+        String((r as { fragment_id: unknown }).fragment_id),
+      ),
+    )
 
-    if (answered / matched.length >= asFraction(next.unlock_threshold)) {
+    // vedic_deep: unlocks when EVERY constellation of the current lens is
+    // cleared (section-clear rule), ignoring unlock_threshold. All other
+    // lenses keep the threshold rule.
+    let shouldUnlock: boolean
+    if (next.slug === VEDIC_DEEP_SLUG) {
+      const { done, total } = sectionClearProgress(matched, respondedIds)
+      shouldUnlock = total > 0 && done >= total
+    } else {
+      shouldUnlock =
+        respondedIds.size / matched.length >= asFraction(next.unlock_threshold)
+    }
+
+    if (shouldUnlock) {
       // `next` is by definition not in the user's unlocked set (checked
       // above), so a plain insert is safe without constraint assumptions.
       await supabase

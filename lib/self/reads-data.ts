@@ -23,6 +23,8 @@ export type FragmentRow = Fragment & {
   condition: unknown
   /** which lens this read belongs to; legacy rows are 'vedic' */
   lens?: string | null
+  /** which chart section (constellation) this read belongs to */
+  section?: string | null
 }
 
 export type ReadResponse = "agree" | "disagree"

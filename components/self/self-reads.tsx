@@ -169,16 +169,33 @@ function LensProgress({ lens }: { lens: SelfReadsData["lens"] }) {
         {line}
       </p>
       {lens.total > 0 && lens.next && (
-        <p
-          style={{
-            fontSize: 10,
-            letterSpacing: 1.5,
-            color: "#3a3a3a",
-            fontFamily: MONO,
-          }}
-        >
-          {lens.next.name.toLowerCase()} · unlocks as you answer more reads
-        </p>
+        <>
+          <p
+            style={{
+              fontSize: 10,
+              letterSpacing: 1.5,
+              color: "#3a3a3a",
+              fontFamily: MONO,
+            }}
+          >
+            {lens.clearedProgress
+              ? `${lens.next.name.toLowerCase()} — unlocks when every constellation is cleared`
+              : `${lens.next.name.toLowerCase()} · unlocks as you answer more reads`}
+          </p>
+          {lens.clearedProgress && (
+            <p
+              style={{
+                fontSize: 10,
+                letterSpacing: 1.5,
+                color: "#3a3a3a",
+                fontFamily: MONO,
+              }}
+            >
+              {lens.clearedProgress.done} of {lens.clearedProgress.total}{" "}
+              cleared
+            </p>
+          )}
+        </>
       )}
     </div>
   )
