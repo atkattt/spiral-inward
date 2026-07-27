@@ -145,9 +145,8 @@ export function HistoryView() {
             }}
           >
             <span style={{ color: "#555" }}>{"› "}</span>
-            everything you&apos;ve claimed and everything you let go. tap any
-            read to revisit. release what stops fitting. bring back what
-            returns.
+            all your reads in one place. tap any of them to reread, keep, or
+            remove.
           </p>
         </section>
 
