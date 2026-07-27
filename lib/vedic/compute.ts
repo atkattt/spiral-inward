@@ -10,7 +10,9 @@ import {
   julianDay,
   lahiriAyanamsa,
   meanNodeLongitude,
+  nakshatraKeyOf,
   norm360,
+  padaOf,
   place,
   zonedWallTimeToUtc,
 } from "@/lib/vedic/astro"
@@ -70,6 +72,10 @@ export type ComputedChart = {
   }
   houses: Record<number, { sign: string; planets: string[] }>
   dashas: ReturnType<typeof computeDashas>
+  /** Moon's nakshatra, underscore spelling matching fragment conditions. */
+  moon_nakshatra: string
+  /** Quarter within the Moon's nakshatra, 1-4 (each 3°20'). */
+  moon_pada: number
 }
 
 // Thrown for invalid input so callers can surface a clean message.
@@ -159,6 +165,20 @@ export function computeChart(input: ChartInput): ComputedChart {
   const moon = planets.find((p) => p.name === "moon")!
   const dashas = computeDashas(moon.longitude, utcDate, new Date())
 
+  // The Moon's nakshatra (underscore spelling, matched on by 'moon_nakshatra'
+  // fragments) and pada. Embedded onto the moon entry in `planets` too so
+  // the values persist through the existing charts row (planets jsonb)
+  // without any schema change.
+  const moonNakshatra = nakshatraKeyOf(moon.longitude)
+  const moonPada = padaOf(moon.longitude)
+  const moonRow = planetsWithHouse.find((p) => p.planet === "moon")
+  if (moonRow) {
+    Object.assign(moonRow, {
+      moon_nakshatra: moonNakshatra,
+      moon_pada: moonPada,
+    })
+  }
+
   return {
     meta: {
       utc: utcDate.toISOString(),
@@ -177,5 +197,7 @@ export function computeChart(input: ChartInput): ComputedChart {
     },
     houses,
     dashas,
+    moon_nakshatra: moonNakshatra,
+    moon_pada: moonPada,
   }
 }

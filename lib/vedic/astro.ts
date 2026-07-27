@@ -50,6 +50,26 @@ export const NAKSHATRAS = [
   "revati",
 ] as const
 
+// The same 27 nakshatras with the underscore spellings used by fragment
+// conditions (e.g. "purva_phalguni"). Index-aligned with NAKSHATRAS.
+export const NAKSHATRA_KEYS = NAKSHATRAS.map((n) =>
+  n.replace(/ /g, "_"),
+) as readonly string[]
+
+// Nakshatra key (underscore spelling) for a sidereal longitude.
+export function nakshatraKeyOf(siderealLongitude: number): string {
+  const lon = norm360(siderealLongitude)
+  return NAKSHATRA_KEYS[Math.floor(lon / NAK_LEN) % 27]
+}
+
+// Pada (quarter within the nakshatra, 1-4, each 3°20') for a sidereal
+// longitude.
+export function padaOf(siderealLongitude: number): number {
+  const lon = norm360(siderealLongitude)
+  const posInNak = lon - Math.floor(lon / NAK_LEN) * NAK_LEN
+  return Math.min(4, Math.floor(posInNak / (NAK_LEN / 4)) + 1)
+}
+
 // Vimshottari cycle: the 9 dasha lords in order, with their period lengths in
 // years (total = 120). The lord of a nakshatra is DASHA_SEQUENCE[index % 9].
 export const DASHA_SEQUENCE = [

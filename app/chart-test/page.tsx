@@ -40,6 +40,8 @@ type PlanetRow = {
 
 type ChartResponse = {
   meta?: Record<string, unknown>
+  moon_nakshatra?: string
+  moon_pada?: number
   planets: PlanetRow[]
   ascendant: {
     sign: string
@@ -244,6 +246,26 @@ export default function ChartTestPage() {
                   </tbody>
                 </table>
               </div>
+            </section>
+
+            {/* moon nakshatra sanity check */}
+            <section className="flex flex-col gap-3">
+              <h2 className="text-xs tracking-widest text-neutral-500">
+                moon nakshatra
+              </h2>
+              {(() => {
+                const moon = result.planets.find((p) => p.planet === "moon")
+                return (
+                  <p className="text-sm text-neutral-400">
+                    longitude ·{" "}
+                    {moon ? `${moon.longitude.toFixed(4)}°` : "—"}
+                    {" · "}
+                    nakshatra · {result.moon_nakshatra ?? "—"}
+                    {" · "}
+                    pada · {result.moon_pada ?? "—"}
+                  </p>
+                )
+              })()}
             </section>
 
             {/* current dasha */}

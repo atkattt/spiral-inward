@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
 import { matchFragments, type Chart, type Fragment } from "@/lib/matcher"
+import { nakshatraKeyOf, padaOf } from "@/lib/vedic/astro"
 import { engagementScore } from "@/lib/self/avatar-stages"
 import {
   computeLensState,
@@ -42,6 +43,36 @@ export async function withRetry<T>(fn: () => Promise<T>): Promise<T> {
     console.error("[spiral] query failed, retrying once:", err)
     await new Promise((r) => setTimeout(r, 300))
     return await fn()
+  }
+}
+
+/**
+ * Lazy backfill of moon_nakshatra / moon_pada onto a stored chart's moon
+ * planet entry (planets jsonb — no schema change). Mutates `chart` in memory
+ * so this load already matches, and persists best-effort for the next one.
+ */
+async function backfillMoonNakshatra(
+  supabase: SupabaseClient,
+  profileId: string,
+  chart: Chart,
+): Promise<void> {
+  try {
+    if (!Array.isArray(chart.planets)) return
+    const moon = chart.planets.find(
+      (p) => String(p.planet ?? "").toLowerCase() === "moon",
+    )
+    if (!moon || moon.moon_nakshatra) return // nothing there, or already done
+    if (typeof moon.longitude !== "number") return
+    moon.moon_nakshatra = nakshatraKeyOf(moon.longitude)
+    moon.moon_pada = padaOf(moon.longitude)
+    await supabase
+      .from("charts")
+      .update({ planets: chart.planets })
+      .eq("profile_id", profileId)
+  } catch (err) {
+    // Never let a backfill hiccup break the page — matching still works from
+    // the longitude directly.
+    console.error("[spiral] moon_nakshatra backfill failed:", err)
   }
 }
 
@@ -96,6 +127,12 @@ export async function loadSelfReads(
     if (error) throw new Error(`charts query failed: ${error.message}`)
     return (data as Chart | null) ?? null
   })
+
+  // Lazy backfill: charts saved before moon_nakshatra existed don't carry it.
+  // Compute from the stored moon longitude, patch in memory, and save back
+  // into the planets jsonb (best-effort — matching works either way since
+  // the matcher can also derive it from the longitude).
+  if (chart) await backfillMoonNakshatra(supabase, profileId, chart)
 
   // 2) all authored fragments — same rule: a silent empty list here erases
   // every star from the spiral.

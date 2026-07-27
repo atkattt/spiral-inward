@@ -8,6 +8,7 @@
 // - If a condition references a field that's missing from the chart (or the
 //   condition itself is malformed), that fragment simply doesn't match — we
 //   never throw.
+import { nakshatraKeyOf } from "@/lib/vedic/astro"
 
 // ---- chart shape (loose — we only read what we need) ----------------------
 export type ChartPlanet = {
@@ -16,11 +17,17 @@ export type ChartPlanet = {
   house: number | string
   degree?: number
   nakshatra?: string
+  longitude?: number
+  // Stored on the moon entry only (underscore spelling, e.g. "purva_phalguni")
+  moon_nakshatra?: string
+  moon_pada?: number
 }
 
 export type Chart = {
   planets?: ChartPlanet[]
   ascendant?: { sign?: string; degree?: number; nakshatra?: string }
+  moon_nakshatra?: string
+  moon_pada?: number
   houses?: Record<string, { sign?: string; planets?: string[] }>
   dashas?: {
     current?: {
@@ -108,6 +115,22 @@ function findPlanet(chart: Chart, name: unknown): ChartPlanet | undefined {
   return chart.planets.find((p) => lc(p.planet) === target)
 }
 
+// The Moon's nakshatra in the underscore spelling fragment conditions use.
+// Prefers the stored value (chart-level, then the moon planet entry) and
+// falls back to deriving it from the stored moon longitude — so charts saved
+// before moon_nakshatra existed still match without waiting for a backfill.
+function moonNakshatraOf(chart: Chart): string | undefined {
+  const stored = lc(chart.moon_nakshatra)
+  if (stored) return stored
+  const moon = findPlanet(chart, "moon")
+  const onMoon = lc(moon?.moon_nakshatra)
+  if (onMoon) return onMoon
+  if (typeof moon?.longitude === "number") {
+    return nakshatraKeyOf(moon.longitude)
+  }
+  return undefined
+}
+
 // Ruling planet of whichever sign occupies a given house number.
 function houseLord(chart: Chart, houseNumber: unknown): string | undefined {
   const key = lc(houseNumber)
@@ -151,6 +174,9 @@ function matchesCondition(
       const p = findPlanet(chart, condition.planet)
       return !!p && eq(p.nakshatra, condition.nakshatra)
     }
+
+    case "moon_nakshatra":
+      return eq(moonNakshatraOf(chart), condition.nakshatra)
 
     case "ascendant_sign":
       return eq(chart.ascendant?.sign, condition.sign)
