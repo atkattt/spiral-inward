@@ -66,36 +66,42 @@ export function SelfReads({
 
   if (approved.length === 0) {
     return (
-      <p
-        style={{
-          fontSize: 13.5,
-          lineHeight: 1.65,
-          letterSpacing: 0.3,
-          color: "#6a6a6a",
-          fontFamily: MONO,
-        }}
-      >
-        <span style={{ color: "#555" }}>{"› "}</span>
-        nothing here yet. walk the spiral — every read you claim as yours
-        appears here, and your chart builds itself.
-      </p>
+      <div className="flex flex-col gap-4">
+        <LensProgress lens={data.lens} />
+        <p
+          style={{
+            fontSize: 13.5,
+            lineHeight: 1.65,
+            letterSpacing: 0.3,
+            color: "#6a6a6a",
+            fontFamily: MONO,
+          }}
+        >
+          <span style={{ color: "#555" }}>{"› "}</span>
+          nothing here yet. walk the spiral — every read you claim as yours
+          appears here, and your chart builds itself.
+        </p>
+      </div>
     )
   }
 
   return (
     <div className="flex flex-col gap-8">
-      {/* quiet growth meter — how much of the chart has surfaced */}
-      <p
-        style={{
-          fontSize: 10,
-          letterSpacing: 1.5,
-          textTransform: "uppercase",
-          color: "#4a4a4a",
-          fontFamily: MONO,
-        }}
-      >
-        {approved.length} of {total} reads claimed
-      </p>
+      <div className="flex flex-col gap-4">
+        <LensProgress lens={data.lens} />
+        {/* quiet growth meter — how much of the chart has surfaced */}
+        <p
+          style={{
+            fontSize: 10,
+            letterSpacing: 1.5,
+            textTransform: "uppercase",
+            color: "#4a4a4a",
+            fontFamily: MONO,
+          }}
+        >
+          {approved.length} of {total} reads claimed
+        </p>
+      </div>
 
       {groups.map((g) => (
         <section key={g.section} className="flex flex-col gap-3">
@@ -133,6 +139,47 @@ export function SelfReads({
           </div>
         </section>
       ))}
+    </div>
+  )
+}
+
+/**
+ * Lens progression — a quiet line for the current lens, and the next lens as
+ * a locked row underneath. A frontier lens (unlocked but no reads authored
+ * yet) is shown as coming instead of a 0-of-0 count. Lowercase, no ceremony.
+ */
+function LensProgress({ lens }: { lens: SelfReadsData["lens"] }) {
+  if (!lens) return null
+
+  const line =
+    lens.total > 0
+      ? `${lens.current.name.toLowerCase()} · ${lens.answered} of ${lens.total} reads answered`
+      : `${lens.current.name.toLowerCase()} · coming soon`
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      <p
+        style={{
+          fontSize: 10,
+          letterSpacing: 1.5,
+          color: "#6a6a6a",
+          fontFamily: MONO,
+        }}
+      >
+        {line}
+      </p>
+      {lens.total > 0 && lens.next && (
+        <p
+          style={{
+            fontSize: 10,
+            letterSpacing: 1.5,
+            color: "#3a3a3a",
+            fontFamily: MONO,
+          }}
+        >
+          {lens.next.name.toLowerCase()} · unlocks as you answer more reads
+        </p>
+      )}
     </div>
   )
 }

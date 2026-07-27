@@ -1,6 +1,13 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
 import { matchFragments, type Chart, type Fragment } from "@/lib/matcher"
 import { engagementScore } from "@/lib/self/avatar-stages"
+import {
+  computeLensState,
+  ensureUnlockedLenses,
+  lensOf,
+  loadActiveLenses,
+  type LensState,
+} from "@/lib/self/lenses"
 
 // A fragment row as stored in Supabase (superset of the matcher's Fragment).
 export type FragmentRow = Fragment & {
@@ -14,6 +21,8 @@ export type FragmentRow = Fragment & {
   weight: number | null
   trigger_type: string | null
   condition: unknown
+  /** which lens this read belongs to; legacy rows are 'vedic' */
+  lens?: string | null
 }
 
 export type ReadResponse = "agree" | "disagree"
@@ -41,6 +50,8 @@ export type SelfReadsData = {
   answers: Record<string, string>
   // fragment_id -> agree | disagree
   responses: Record<string, ReadResponse>
+  // lens progression (null when the lenses tables are unavailable)
+  lens: LensState | null
 }
 
 // Normalize self_questions (jsonb array, JSON string, or plain string) to a
@@ -92,8 +103,25 @@ export async function loadSelfReads(
     return (data ?? []) as FragmentRow[]
   })
 
-  // 3) match chart -> fragments (deterministic, sorted by weight desc)
-  const matched = chart ? matchFragments(chart, fragments) : []
+  // 3) match chart -> fragments (deterministic, sorted by weight desc), then
+  // gate by the user's unlocked lenses. matchedAll (every lens) stays local —
+  // it feeds the lens progress numbers; everything downstream only ever sees
+  // fragments from unlocked lenses. If the lenses tables are unavailable the
+  // gate falls open (old behavior) rather than erasing the universe.
+  const matchedAll = chart ? matchFragments(chart, fragments) : []
+  let matched = matchedAll
+  let lenses: Awaited<ReturnType<typeof loadActiveLenses>> = []
+  let unlockedSlugs: Set<string> | null = null
+  try {
+    lenses = await loadActiveLenses(supabase)
+    if (lenses.length > 0) {
+      unlockedSlugs = await ensureUnlockedLenses(supabase, profileId, lenses)
+      const unlocked = unlockedSlugs
+      matched = matchedAll.filter((f) => unlocked.has(lensOf(f)))
+    }
+  } catch (err) {
+    console.error("[spiral] lens gating unavailable, showing all lenses:", err)
+  }
 
   // 4) the user's saved answers (kind = 'answer')
   const answers: Record<string, string> = {}
@@ -125,7 +153,14 @@ export async function loadSelfReads(
     // read_responses table not created yet — treat as no responses.
   }
 
-  return { chart, matched, answers, responses }
+  // 6) lens progress, computed on demand — no stored state beyond the
+  // unlock rows themselves.
+  const lens =
+    unlockedSlugs !== null
+      ? computeLensState(lenses, unlockedSlugs, matchedAll, responses)
+      : null
+
+  return { chart, matched, answers, responses, lens }
 }
 
 /**

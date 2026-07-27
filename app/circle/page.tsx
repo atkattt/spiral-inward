@@ -92,8 +92,27 @@ export default async function CirclePage() {
     // list and let the universe run the same deterministic matcher. NEVER
     // swallow a query error here: an empty list silently erases every star
     // from the spiral (retry once, then fail loudly).
+    // Guests have no lens progress rows — they only ever see the FIRST lens
+    // (lowest sort_order), same starting point as a fresh account.
+    const firstLensSlug = await (async () => {
+      try {
+        const { data } = await supabase
+          .from("lenses")
+          .select("slug")
+          .eq("is_active", true)
+          .order("sort_order", { ascending: true })
+          .limit(1)
+          .maybeSingle()
+        return (data?.slug as string | undefined) ?? "vedic"
+      } catch {
+        return "vedic"
+      }
+    })()
     const fragmentRows = await withRetry(async () => {
-      const { data, error } = await supabase.from("fragments").select("*")
+      const { data, error } = await supabase
+        .from("fragments")
+        .select("*")
+        .eq("lens", firstLensSlug)
       if (error) throw new Error(`fragments query failed: ${error.message}`)
       return data ?? []
     })

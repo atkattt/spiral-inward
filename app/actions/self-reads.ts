@@ -1,6 +1,7 @@
 "use server"
 
 import { createClient } from "@/lib/supabase/server"
+import { maybeUnlockNextLens } from "@/lib/self/lenses"
 import type { ReadResponse } from "@/lib/self/reads-data"
 
 type Result = { ok: true } | { ok: false; error: string }
@@ -31,6 +32,11 @@ export async function saveReadResponse(
     )
 
   if (error) return { ok: false, error: error.message }
+
+  // Every saved response can push lens progress over the next unlock
+  // threshold. Best-effort — never blocks or fails the save itself.
+  await maybeUnlockNextLens(supabase, user.id)
+
   return { ok: true }
 }
 
