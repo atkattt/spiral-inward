@@ -22,32 +22,41 @@ export async function eraseJourney(): Promise<{ error: string | null }> {
   const userId = user.id
 
   // Supabase-side journey rows (each RLS-scoped to the user's own id).
-  const results = await Promise.all([
-    supabase.from("charts").delete().eq("profile_id", userId),
-    supabase.from("self_entries").delete().eq("profile_id", userId),
-    supabase.from("conversations").delete().eq("profile_id", userId),
-    supabase.from("read_responses").delete().eq("profile_id", userId),
-  ])
-  const failed = results.find((r) => r.error && r.error.code !== "42P01")
-  if (failed?.error) return { error: failed.error.message }
+  const journeyTables = [
+    "charts",
+    "self_entries",
+    "conversations",
+    "read_responses",
+  ] as const
+  const results = await Promise.all(
+    journeyTables.map((table) =>
+      supabase.from(table).delete().eq("profile_id", userId),
+    ),
+  )
+  // Tolerate missing tables (42P01) in older environments; name the table
+  // in real failures so they can be diagnosed from the client toast.
+  const failedIndex = results.findIndex(
+    (r) => r.error && r.error.code !== "42P01",
+  )
+  if (failedIndex !== -1) {
+    const failed = results[failedIndex]
+    return {
+      error: `${journeyTables[failedIndex]}: ${failed.error?.message}`,
+    }
+  }
 
-  // Reset the profile's birth data back to the placeholder the DB trigger
-  // seeds new profiles with. Without this, ensureUserChart() would silently
-  // RECOMPUTE the chart from the retained birth data and skip onboarding —
-  // the journey wouldn't actually restart. ("pending" is the trigger's
-  // placeholder convention; see app/actions/birth-chart.ts.)
+  // Reset the profile's birth_place back to the "pending" placeholder the
+  // DB trigger seeds new profiles with. Without this, ensureUserChart()
+  // would silently RECOMPUTE the chart from the retained birth data and
+  // skip onboarding — the journey wouldn't actually restart. Setting ONLY
+  // birth_place is deliberate: the onboarding gate checks
+  // `birth_place !== "pending"`, and nulling the other birth columns can
+  // violate NOT NULL constraints on live databases.
   const { error: profileError } = await supabase
     .from("profiles")
-    .update({
-      birth_date: null,
-      birth_time: null,
-      birth_place: "pending",
-      birth_lat: null,
-      birth_lng: null,
-      timezone: null,
-    })
+    .update({ birth_place: "pending" })
     .eq("id", userId)
-  if (profileError) return { error: profileError.message }
+  if (profileError) return { error: `profile reset: ${profileError.message}` }
 
   // Drizzle-side journey rows: the circle's people + bonds and the fog
   // frontier (these drive the spiral markers and the avatar's growth).
