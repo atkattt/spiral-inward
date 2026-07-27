@@ -7,7 +7,8 @@ import type { Person, Relationship } from "@/lib/db/schema"
 import { useSpiral } from "@/components/spiral/spiral-provider"
 import { makePersonRead, type Read } from "@/lib/spiral/reads"
 import { SELF_PERSON_ID } from "@/lib/relationships"
-import { stageForMajors, type GrowthEvent } from "@/lib/self/avatar-stages"
+import { milestoneLevel, type AvatarSignals } from "@/lib/self/avatar-slots"
+import { sectionClearProgress } from "@/lib/self/lenses"
 import { UniverseReadPanel, type PanelData } from "@/components/circle/universe-read-panel"
 import { saveRevealRadius } from "@/app/actions/progress"
 import { saveReadResponse } from "@/app/actions/self-reads"
@@ -24,7 +25,6 @@ import {
   SECTION_ORDER,
   SECTION_COLORS,
   sectionFor,
-  journeyGrowthEvents,
   MAJOR_WEIGHT,
   type SectionKey,
 } from "@/lib/spiral/sections"
@@ -99,14 +99,13 @@ const MAX_R = 480
 // cover more glyphs with their opaque background — intended.
 const AVATAR_CLEAR_RADIUS = 28
 
-// ---- Stage-driven disc sizing --------------------------------------------
-// The creature's disc grows with its evolution: stage 1 ≈ 120px diameter,
-// +12px per stage to ≈ 204px at stage 8, then +2px per accretion detail,
-// capped at 240px. Gentle per-stage steps keep each evolution feeling like a
-// small tamagotchi growth spurt rather than a leap. The creature glyph scales
-// with the disc (constant ratio, skeleton ≈ half the disc).
-function discSizeFor(stage: number, detailCount: number): number {
-  return Math.min(240, 120 + (stage - 1) * 12 + detailCount * 2)
+// ---- Milestone-driven disc sizing ----------------------------------------
+// The creature's disc grows with its structure: birth ≈ 120px diameter, +16px
+// per milestone slot unlocked (eyes → mouth → sides → ears), then +2px per
+// aura glyph, capped at 240px. Each unlock reads as a small tamagotchi growth
+// spurt; the creature glyph scales with the disc (constant ratio).
+function discSizeFor(level: number, auraCount: number): number {
+  return Math.min(240, 120 + level * 16 + auraCount * 2)
 }
 const FADE_BAND = 76
 // The nebula is sampled along the spiral curve; at each sample we scatter a
@@ -358,7 +357,7 @@ export function SpiralUniverse({
   people,
   relationships,
   colorById,
-  engagementScore = 0,
+  answerCount = 0,
   userId,
   onSelectSelf,
   guest,
@@ -373,8 +372,8 @@ export function SpiralUniverse({
   colorById: Map<number, string>
   /** resting expression, retained for API compatibility (unused by creature) */
   mood?: Mood
-  /** drives the evolving self creature's stage + accretion detail count */
-  engagementScore?: number
+  /** written answers so far — one permanent aura glyph each on the creature */
+  answerCount?: number
   /** stable per-user seed so the creature regrows the exact same being */
   userId?: string
   onSelectSelf?: () => void
@@ -605,26 +604,47 @@ export function SpiralUniverse({
     })
   }, [fragments])
 
-  // The creature grows from THE JOURNEY ITSELF, walking the sections in
-  // order. Only reads placed in the CURRENT sky count (stale response ids
-  // from old sessions/content must not inflate the being):
-  //   - each answered STAR (major) = a BIG growth event: skeleton stage-up +
-  //     that section's sigil accessory (flavor ties back to the read).
-  //   - every OTHER answered minor in a section = a quiet growth event: a
-  //     texture detail appears or an existing one matures.
-  // Derived by the SHARED helper (lib/spiral/sections.ts) so /self renders
-  // the exact same creature from the same fragments + responses.
-  const journeyEvents = useMemo<GrowthEvent[]>(
-    () => journeyGrowthEvents(fragments, respondedIds),
-    [fragments, respondedIds],
+  // The creature is composed from THE JOURNEY ITSELF, never from points:
+  //   - structure (which slots exist) comes from the section-clear rule over
+  //     the reads placed in the CURRENT sky, so stale ids from old sessions
+  //     or removed content can never inflate the being.
+  //   - disposition (which glyph each slot shows) comes from the user's FULL
+  //     agree/disagree history: the saved read_responses rows plus anything
+  //     judged this session.
+  //   - the aura grows one permanent glyph per written answer.
+  // /self derives the exact same signals, so the being is identical on both.
+  const dispositionCounts = useMemo(() => {
+    const byId = new Map<string, "agree" | "disagree">(
+      Object.entries(initialResponses ?? {}),
+    )
+    for (const r of agreed) byId.set(r.id, "agree")
+    for (const r of disagreed) byId.set(r.id, "disagree")
+    let agrees = 0
+    let disagrees = 0
+    for (const v of byId.values()) {
+      if (v === "agree") agrees++
+      else disagrees++
+    }
+    return { agrees, disagrees }
+  }, [initialResponses, agreed, disagreed])
+
+  const creatureSignals = useMemo<AvatarSignals>(() => {
+    const { done, total } = sectionClearProgress(fragments, respondedIds)
+    return {
+      agrees: dispositionCounts.agrees,
+      disagrees: dispositionCounts.disagrees,
+      answers: answerCount,
+      cleared: done,
+      constellations: total,
+    }
+  }, [dispositionCounts, fragments, respondedIds, answerCount])
+
+  // Disc size follows the creature's structure (see discSizeFor), from the
+  // same signals SelfCreature renders.
+  const discSize = discSizeFor(
+    milestoneLevel(creatureSignals),
+    creatureSignals.answers,
   )
-  // Disc size follows the creature's evolution (see discSizeFor), from the
-  // same journey events SelfCreature renders.
-  const creatureStage = stageForMajors(
-    journeyEvents.filter((e) => e.kind === "major").length,
-  )
-  const creatureDetails = journeyEvents.length
-  const discSize = discSizeFor(creatureStage, creatureDetails)
   // Constant ratio (the previous 248/188 proportion) keeps the skeleton at
   // roughly half the disc at every stage.
   const creatureSize = Math.round(discSize * (248 / 188))

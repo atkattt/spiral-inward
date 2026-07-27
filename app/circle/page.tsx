@@ -3,7 +3,7 @@ import { cookies } from "next/headers"
 import { redirect } from "next/navigation"
 import { getPeople, getRelationships } from "@/app/actions/circle"
 import { getRevealRadius } from "@/app/actions/progress"
-import { loadEngagementScore, loadSelfReads, withRetry } from "@/lib/self/reads-data"
+import { loadAnswerCount, loadSelfReads, withRetry } from "@/lib/self/reads-data"
 import type { UniverseFragment } from "@/lib/spiral/universe-reads"
 import { CircleView } from "@/components/circle/circle-view"
 import { CircleDataProvider } from "@/components/circle/circle-data-provider"
@@ -46,12 +46,12 @@ export default async function CirclePage() {
   } = await supabase.auth.getUser()
 
   if (user) {
-    const [people, relationships, revealRadius, engagementScore, selfReads] =
+    const [people, relationships, revealRadius, answerCount, selfReads] =
       await Promise.all([
         getPeople(),
         getRelationships(),
         getRevealRadius(),
-        loadEngagementScore(supabase, user.id),
+        loadAnswerCount(supabase, user.id),
         loadSelfReads(supabase, user.id),
       ])
 
@@ -75,7 +75,7 @@ export default async function CirclePage() {
         <CircleView
           userName={userName}
           initialRevealRadius={revealRadius}
-          engagementScore={engagementScore}
+          answerCount={answerCount}
           userId={user.id}
           matchedReads={matchedReads}
           initialResponses={selfReads.responses}

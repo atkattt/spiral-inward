@@ -1,6 +1,10 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
 import { matchFragments, type Chart } from "@/lib/matcher"
-import { MAJOR_WEIGHT, sectionFor } from "@/lib/spiral/sections"
+import {
+  MAJOR_WEIGHT,
+  sectionFor,
+  type JourneyFragment,
+} from "@/lib/spiral/sections"
 import type { FragmentRow } from "@/lib/self/reads-data"
 
 // ---------------------------------------------------------------------------
@@ -49,10 +53,10 @@ export const VEDIC_DEEP_SLUG = "vedic_deep"
  *     (or everything it has, when it has fewer than 2)
  */
 export function sectionClearProgress(
-  matched: FragmentRow[],
+  matched: JourneyFragment[],
   respondedIds: ReadonlySet<string>,
 ): { done: number; total: number } {
-  const groups = new Map<string, FragmentRow[]>()
+  const groups = new Map<string, JourneyFragment[]>()
   for (const f of matched) {
     const key = sectionFor(f.section, f.trigger_type, f.condition)
     const g = groups.get(key)

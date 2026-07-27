@@ -1,7 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
 import { matchFragments, type Chart, type Fragment } from "@/lib/matcher"
 import { nakshatraKeyOf, padaOf } from "@/lib/vedic/astro"
-import { engagementScore } from "@/lib/self/avatar-stages"
 import {
   computeLensState,
   ensureUnlockedLenses,
@@ -203,36 +202,25 @@ export async function loadSelfReads(
 }
 
 /**
- * The user's raw engagement score for the evolving self creature: each
- * read_responses row = 1 point, each self_entries answer = 3 points. Used to
- * pick the creature's stage in the universe view (where we don't need the full
- * reads payload). Missing tables are treated as zero so this never crashes.
+ * How many written answers (self_entries kind='answer') the user has saved.
+ * The self creature grows ONE permanent aura glyph per answer, so this is all
+ * the universe view needs beyond the reads payload it already loads. A missing
+ * table is treated as zero so this never crashes.
  */
-export async function loadEngagementScore(
+export async function loadAnswerCount(
   supabase: SupabaseClient,
   profileId: string,
 ): Promise<number> {
-  let responses = 0
-  let answers = 0
-
   try {
     const { count } = await supabase
-      .from("read_responses")
+      .from("self_entries")
       .select("id", { count: "exact", head: true })
       .eq("profile_id", profileId)
-    responses = count ?? 0
+      .eq("kind", "answer")
+    return count ?? 0
   } catch {
-    responses = 0
+    return 0
   }
-
-  const { count: answerCount } = await supabase
-    .from("self_entries")
-    .select("id", { count: "exact", head: true })
-    .eq("profile_id", profileId)
-    .eq("kind", "answer")
-  answers = answerCount ?? 0
-
-  return engagementScore({ responses, answers })
 }
 
 // ---- chart summary for the self-chat voice --------------------------------

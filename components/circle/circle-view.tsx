@@ -31,7 +31,7 @@ import { LogOut, Clock, Menu, X, Info, Star, User, Users } from "lucide-react"
 export function CircleView({
   userName,
   initialRevealRadius,
-  engagementScore = 0,
+  answerCount = 0,
   userId,
   matchedReads,
   initialResponses,
@@ -39,8 +39,8 @@ export function CircleView({
 }: {
   userName: string
   initialRevealRadius: number
-  /** drives the evolving self creature's stage at the universe center */
-  engagementScore?: number
+  /** written answers so far — one permanent aura glyph each on the creature */
+  answerCount?: number
   /** stable per-user seed so the creature regrows the exact same being */
   userId?: string
   /** authed: matched fragments from the /self pipeline — the read objects */
@@ -246,7 +246,7 @@ export function CircleView({
           relationships={relationships}
           colorById={colorById}
           mood={mood}
-          engagementScore={engagementScore}
+          answerCount={answerCount}
           userId={userId}
           guest={guest}
           initialRevealRadius={initialRevealRadius}
