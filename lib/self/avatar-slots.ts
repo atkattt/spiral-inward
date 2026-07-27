@@ -25,19 +25,22 @@
 // PALETTES — softest first, sharpest last. Edit freely.
 // ---------------------------------------------------------------------------
 
+// Every glyph in every palette below was verified to have real coverage in
+// 'Geist Pixel' (the avatar font) — Kannada/Telugu/Canadian-syllabics picks
+// like ಥ ರ ఠ ᒥ ᘳ ୧ render as tofu boxes (▯) and must never be used here.
 export const EYES: string[] = [
   "◕ ◕",
   "● ●",
   "◉ ◉",
-  "ಥ ಥ",
+  "ᴗ ᴗ",
   "o o",
   "⊙ ⊙",
   ". .",
   "• •",
   "- -",
-  "ರ ರ",
+  "ʘ ʘ",
   "¬ ¬",
-  "ఠ ఠ",
+  "︿ ︿",
   "> <",
   "× ×",
   "▼ ▼",
@@ -46,9 +49,9 @@ export const EYES: string[] = [
 // NOTE: 〰 carries U+FE0E (text presentation selector) so it can never render
 // as a color emoji on iOS / Android.
 export const MOUTH: string[] = [
-  "ᗜ",
-  "◡",
+  "ᴗ",
   "‿",
+  "⌣\uFE0E",
   "ω",
   "▽",
   "o",
@@ -63,26 +66,26 @@ export const MOUTH: string[] = [
   "∧",
   "▼",
   "ʬ",
-  "⍊",
+  "益",
 ]
 
 export type GlyphPair = [string, string]
 
 export const SIDES: GlyphPair[] = [
   ["∩", "∩"],
-  ["୧", "୨"],
+  ["╰", "╯"],
   ["(", ")"],
   ["[", "]"],
   ["{", "}"],
   ["⌐", "¬"],
   ["ʅ", "ʃ"],
-  ["ᒥ", "ᒧ"],
+  ["┌", "┐"],
   ["╚", "╝"],
 ]
 
 export const EARS: GlyphPair[] = [
   ["ʕ", "ʔ"],
-  ["ᘳ", "ᘰ"],
+  ["╭", "╮"],
   ["ε", "϶"],
   ["⌒", "⌒"],
   ["ʖ", "ʗ"],
@@ -91,7 +94,7 @@ export const EARS: GlyphPair[] = [
   ["ᆺ", "ᆺ"],
 ]
 
-export const AURA: string[] = ["·", "˙", "°", "*", "✦", "⁘"]
+export const AURA: string[] = ["·", "˙", "°", "*", "⁖", "⁘"]
 
 // ---------------------------------------------------------------------------
 // BIRTH — before the first read is answered the being is locked to  [ . . ]

@@ -10,7 +10,8 @@ import { SelfChat } from "@/components/self/self-chat"
 import { SelfReads } from "@/components/self/self-reads"
 import { SelfView } from "@/components/spiral/self-view"
 import { CHAT_UNLOCK_RADIUS, unlockProgress } from "@/lib/self/unlock"
-import { journeyGrowthEvents } from "@/lib/spiral/sections"
+import { sectionClearProgress } from "@/lib/self/lenses"
+import type { AvatarSignals } from "@/lib/self/avatar-slots"
 import type { SelfReadsData } from "@/lib/self/reads-data"
 
 const MONO =
@@ -29,10 +30,10 @@ export function SelfSpaceView({
   const progress = unlockProgress(revealRadius)
   const unlocked = revealRadius >= CHAT_UNLOCK_RADIUS
 
-  // THE SAME BEING AS /circle: the creature's stage + accreted details are
-  // derived by the shared journeyGrowthEvents helper from the same matched
-  // fragments and read_responses the spiral uses — so whatever the self looks
-  // like at the center of the spiral, it looks identical here.
+  // THE SAME BEING AS /circle: structure from the shared section-clear rule
+  // over the same matched fragments + read_responses, disposition from the
+  // same agree/disagree tally, aura from the same answer count — so whatever
+  // the self looks like at the center of the spiral, it looks identical here.
   const creatureRef = useRef<SelfCreatureHandle>(null)
   // Judging reads now lives on the spiral (/circle); here the set is a
   // read-only seed from what's already been answered.
@@ -42,10 +43,24 @@ export function SelfSpaceView({
   const [answeredIds, setAnsweredIds] = useState<Set<string>>(
     () => new Set(reads ? Object.keys(reads.answers) : []),
   )
-  const growthEvents = useMemo(
-    () => journeyGrowthEvents(reads?.matched ?? [], respondedIds),
-    [reads, respondedIds],
-  )
+  const creatureSignals = useMemo<AvatarSignals>(() => {
+    let agrees = 0
+    let disagrees = 0
+    for (const v of Object.values(reads?.responses ?? {})) {
+      if (v === "agree") agrees++
+      else disagrees++
+    }
+    const { done, total } = sectionClearProgress(reads?.matched ?? [], respondedIds)
+    return {
+      agrees,
+      disagrees,
+      // answers written this session count immediately, so a new aura glyph
+      // accretes the moment the user saves one.
+      answers: answeredIds.size,
+      cleared: done,
+      constellations: total,
+    }
+  }, [reads, respondedIds, answeredIds])
 
   const handleAnswer = useCallback((fragmentId: string) => {
     creatureRef.current?.react("submit")
@@ -88,7 +103,7 @@ export function SelfSpaceView({
             <div className="relative flex h-full w-full items-center justify-center overflow-hidden">
               <SelfCreature
                 ref={creatureRef}
-                growthEvents={growthEvents}
+                signals={creatureSignals}
                 seed={userId}
                 size={230}
                 color="#e8e4da"
