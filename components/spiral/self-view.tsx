@@ -1,24 +1,50 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { useSpiral } from "@/components/spiral/spiral-provider"
 import type { Truth } from "@/lib/spiral/reads"
 
-// The /self page's visual idiom, matched exactly: #070707 panels with
-// #1a1a1a hairlines (rounded-2xl), tiny uppercase #4a4a4a section labels,
-// 13.5px mono body in dim greys with "›" prefixes.
+// This section is treated exactly like the "what this is" story cards on
+// /about (see components/threshold/story-read-cards.tsx): a translucent grey
+// glass card, a bold white uppercase meta label, and 12px body text that types
+// itself out behind a `›` prompt with a blinking cursor.
 const MONO = "'Geist Pixel', ui-monospace, monospace"
 
-// Same surface as /self's locked-chat panel.
+// The story card's glass surface, value-for-value.
+const glassCardStyle: React.CSSProperties = {
+  border: "1px solid rgba(255,255,255,0.18)",
+  borderRadius: 13,
+  background: "rgba(120,120,120,0.30)",
+  backdropFilter: "blur(12px) saturate(120%)",
+  WebkitBackdropFilter: "blur(12px) saturate(120%)",
+  boxShadow:
+    "0 16px 40px rgba(0,0,0,0.28), inset 0 1px 0 rgba(255,255,255,0.14)",
+  padding: "16px 18px 18px",
+  fontFamily: MONO,
+}
+
+// Body copy inside a glass card.
+const glassBodyStyle: React.CSSProperties = {
+  fontSize: 12,
+  lineHeight: 1.6,
+  letterSpacing: 0.4,
+  color: "#f0f0f0",
+  fontFamily: MONO,
+  fontWeight: 500,
+}
+
+// Wells that sit *inside* the glass (composer, kept entries): recessed rather
+// than opaque black, so they read as part of the same pane of glass.
 const panelStyle: React.CSSProperties = {
-  borderRadius: 16,
-  border: "1px solid #1a1a1a",
-  background: "#070707",
+  borderRadius: 11,
+  border: "1px solid rgba(255,255,255,0.14)",
+  background: "rgba(0,0,0,0.28)",
   padding: 16,
 }
 
-// Quiet uppercase micro-actions — the same register as /self's tiny labels
-// ("back", section labels, "% toward opening").
+const HAIRLINE = "rgba(255,255,255,0.14)"
+
+// Quiet uppercase micro-actions, lifted to read against the glass.
 const actionStyle: React.CSSProperties = {
   background: "none",
   border: "none",
@@ -28,9 +54,10 @@ const actionStyle: React.CSSProperties = {
   fontSize: 10,
   letterSpacing: 2,
   textTransform: "uppercase",
-  color: "#6a6a6a",
+  color: "rgba(255,255,255,0.7)",
 }
 
+/** The story card's meta line: small, wide-tracked, bold, white. */
 function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
     <span
@@ -38,12 +65,81 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
         fontSize: 10,
         letterSpacing: 2,
         textTransform: "uppercase",
-        color: "#4a4a4a",
+        color: "#ffffff",
+        fontWeight: 700,
         fontFamily: MONO,
       }}
     >
       {children}
     </span>
+  )
+}
+
+/**
+ * The story cards' signature: the body types itself in once the card is in
+ * view, behind a `›` prompt, with a blinking block cursor while it runs.
+ * Renders instantly under prefers-reduced-motion.
+ */
+function TypedLine({ text }: { text: string }) {
+  const ref = useRef<HTMLParagraphElement>(null)
+  const [count, setCount] = useState(0)
+  const [started, setStarted] = useState(false)
+
+  useEffect(() => {
+    if (
+      window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ||
+      !ref.current
+    ) {
+      setCount(text.length)
+      return
+    }
+    const io = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) {
+          setStarted(true)
+          io.disconnect()
+        }
+      },
+      { threshold: 0.35 },
+    )
+    io.observe(ref.current)
+    return () => io.disconnect()
+  }, [text.length])
+
+  useEffect(() => {
+    if (!started) return
+    let i = 0
+    let timer: ReturnType<typeof setTimeout>
+    const tick = () => {
+      i = Math.min(text.length, i + 2)
+      setCount(i)
+      if (i < text.length) timer = setTimeout(tick, 14)
+    }
+    timer = setTimeout(tick, 160)
+    return () => clearTimeout(timer)
+  }, [started, text.length])
+
+  const typing = count < text.length
+
+  return (
+    <p ref={ref} style={{ ...glassBodyStyle, whiteSpace: "pre-wrap" }}>
+      <span style={{ color: "#cfcfcf" }}>{"› "}</span>
+      {text.slice(0, count)}
+      {typing && (
+        <span
+          style={{
+            display: "inline-block",
+            width: 8,
+            height: 16,
+            background: "#ffffff",
+            marginLeft: 1,
+            verticalAlign: -3,
+            animation: "srcBlink 1.05s steps(1) infinite",
+          }}
+        />
+      )}
+      <style>{`@keyframes srcBlink { 50% { opacity: 0; } }`}</style>
+    </p>
   )
 }
 
@@ -58,35 +154,14 @@ export function SelfView() {
     setText("")
   }
 
-  // An embeddable section (no page shell) — it lives inside /self's layout.
-  // The whole "what you know" block sits in its own curved card, the same
-  // rounded idiom the onboarding ritual card uses.
+  // An embeddable section (no page shell) — it lives inside /self's layout,
+  // presented as a story-style glass read card.
   return (
-    <section
-      className="flex flex-col gap-6"
-      style={{
-        background: "#070707",
-        border: "1px solid #1a1a1a",
-        borderRadius: 28,
-        padding: 20,
-      }}
-    >
-      {/* 1 — Section intro, in /self's mono subline voice */}
-      <div className="flex flex-col gap-3">
+    <section className="flex flex-col gap-6" style={glassCardStyle}>
+      {/* 1 — Meta line + typed intro, exactly the story card's opening */}
+      <div className="flex flex-col gap-4">
         <SectionLabel>what you know</SectionLabel>
-        <p
-          style={{
-            fontSize: 13.5,
-            lineHeight: 1.65,
-            letterSpacing: 0.3,
-            color: "#6a6a6a",
-            fontFamily: MONO,
-          }}
-        >
-          <span style={{ color: "#555" }}>{"› "}</span>
-          write anything you know about yourself. a trait, a habit, a
-          feeling. whatever you add here shapes your chart.
-        </p>
+        <TypedLine text="write anything you know about yourself. a trait, a habit, a feeling. whatever you add here shapes your chart." />
       </div>
 
       {/* 2 — The composer */}
@@ -96,27 +171,26 @@ export function SelfView() {
           onChange={(e) => setText(e.target.value)}
           rows={4}
           placeholder="i'm someone who…"
-          className="w-full resize-none bg-transparent outline-none placeholder:text-[#4a4a4a]"
+          className="w-full resize-none bg-transparent outline-none placeholder:text-white/40"
           style={{
-            fontFamily: MONO,
-            fontSize: 13.5,
-            letterSpacing: 0.3,
-            lineHeight: 1.65,
-            color: "#e8e4da",
-            caretColor: "#e8e4da",
+            ...glassBodyStyle,
+            color: "#ffffff",
+            caretColor: "#ffffff",
           }}
         />
         <div
           className="mt-3 flex items-center justify-center pt-3"
-          style={{ borderTop: "1px solid #1a1a1a" }}
+          style={{ borderTop: `1px solid ${HAIRLINE}` }}
         >
           <button
             onClick={handleSubmit}
             disabled={!text.trim()}
             style={{
               background: "transparent",
-              border: `1px solid ${text.trim() ? "#f5f5f5" : "#2a2a2a"}`,
-              color: text.trim() ? "#f5f5f5" : "#4a4a4a",
+              border: `1px solid ${
+                text.trim() ? "#ffffff" : "rgba(255,255,255,0.25)"
+              }`,
+              color: text.trim() ? "#ffffff" : "rgba(255,255,255,0.45)",
               fontFamily: MONO,
               fontSize: 10,
               letterSpacing: 2,
@@ -197,7 +271,7 @@ function EntryCard({ truth }: { truth: Truth }) {
     >
       <div
         className="relative"
-        style={{ ...panelStyle, border: "1px solid #2a2a2a" }}
+        style={{ ...panelStyle, border: "1px solid rgba(255,255,255,0.2)" }}
         onClick={() => !revealed && setRevealed(true)}
       >
         {/* Permanent mark on a sent entry: the tiny creature face, dim, in
@@ -218,11 +292,13 @@ function EntryCard({ truth }: { truth: Truth }) {
               fontFamily: MONO,
               fontSize: 10,
               letterSpacing: 1,
-              color: "#4a4a4a",
+              color: "rgba(255,255,255,0.5)",
             }}
           >
             {markLabel && (
-              <span style={{ color: "#6a6a6a" }}>your self holds this</span>
+              <span style={{ color: "rgba(255,255,255,0.7)" }}>
+                your self holds this
+              </span>
             )}
             {FACE_GLYPH}
           </button>
@@ -237,18 +313,15 @@ function EntryCard({ truth }: { truth: Truth }) {
               autoFocus
               className="w-full resize-none bg-transparent outline-none"
               style={{
-                fontFamily: MONO,
-                fontSize: 13.5,
-                letterSpacing: 0.3,
-                lineHeight: 1.65,
-                color: "#e8e4da",
-                caretColor: "#e8e4da",
+                ...glassBodyStyle,
+                color: "#ffffff",
+                caretColor: "#ffffff",
               }}
             />
             <div className="mt-2 flex gap-5">
               <button
                 onClick={saveEdit}
-                style={{ ...actionStyle, color: "#f5f5f5" }}
+                style={{ ...actionStyle, color: "#ffffff" }}
               >
                 save
               </button>
@@ -268,11 +341,7 @@ function EntryCard({ truth }: { truth: Truth }) {
             <p
               className={`text-pretty ${sending ? "animate-send-essence" : ""}`}
               style={{
-                fontFamily: MONO,
-                fontSize: 13.5,
-                letterSpacing: 0.3,
-                lineHeight: 1.65,
-                color: "#e8e4da",
+                ...glassBodyStyle,
                 paddingRight: truth.sentToSelf ? 36 : undefined,
               }}
             >
@@ -286,7 +355,7 @@ function EntryCard({ truth }: { truth: Truth }) {
                     fontFamily: MONO,
                     fontSize: 11,
                     letterSpacing: 1,
-                    color: "#8a8a8a",
+                    color: "rgba(255,255,255,0.8)",
                   }}
                 >
                   let this one go?
@@ -314,7 +383,7 @@ function EntryCard({ truth }: { truth: Truth }) {
                     className="inline-flex items-center gap-1.5"
                     style={{
                       ...actionStyle,
-                      color: sending ? "#f5f5f5" : "#8a8a8a",
+                      color: sending ? "#ffffff" : "rgba(255,255,255,0.7)",
                     }}
                   >
                     <span aria-hidden="true">{FACE_GLYPH}</span>
