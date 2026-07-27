@@ -120,11 +120,16 @@ export function AuthForm({ mode }: { mode: "sign-in" | "sign-up" }) {
         size="lg"
         disabled={googleLoading}
         onClick={handleGoogle}
-        className="h-12 w-full rounded-full border-border/80 px-16 font-mono text-xs lowercase tracking-widest"
-        // Same pill, but a SOLID near-black surface (inline so it beats the
-        // variant's own translucent background) — the ascii spiral behind the
-        // page must never show through the button face.
-        style={{ backgroundColor: "#050505" }}
+        className="h-12 border-border/80 font-mono text-xs lowercase tracking-widest"
+        // Compact button sized to just the three words, with larger padding
+        // (132px right, 137px left) and moderate rounded corners (24px instead
+        // of full pill). Solid near-black background so the spiral never shows through.
+        style={{
+          paddingRight: "132px",
+          paddingLeft: "137px",
+          borderRadius: "24px",
+          backgroundColor: "#050505",
+        }}
       >
         {googleLoading ? "one moment…" : "continue with google"}
       </Button>
