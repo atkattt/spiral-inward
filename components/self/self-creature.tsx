@@ -1,6 +1,14 @@
 "use client"
 
 import {
+  Noto_Sans_Canadian_Aboriginal,
+  Noto_Sans_Kannada,
+  Noto_Sans_Mono,
+  Noto_Sans_Oriya,
+  Noto_Sans_Symbols_2,
+  Noto_Sans_Telugu,
+} from "next/font/google"
+import {
   forwardRef,
   useEffect,
   useImperativeHandle,
@@ -99,7 +107,71 @@ const ACCRETE_MS = 800
 /** How long a living-material flicker holds before reverting. */
 const FLICKER_MS = 300
 
-const MONO = "'Geist Pixel', ui-monospace, monospace"
+/**
+ * The avatar's OWN font — deliberately not the app's pixel font.
+ *
+ * The palettes reach across scripts (Kannada ಥ ರ, Telugu ఠ, Oriya ୧, Canadian
+ * syllabics ᒥ ᘳ, CJK 灬, Hangul ᆺ), so the being needs the widest monospace
+ * coverage we can get. Noto Sans Mono is loaded here, scoped to this
+ * component only — every label, the disc, and the rest of /self and /circle
+ * keep the app's existing fonts untouched.
+ *
+ * Noto Sans Mono only publishes Latin/Greek/Cyrillic subsets on Google Fonts,
+ * so the Indic / syllabics / CJK glyphs resolve through the platform's own
+ * Noto or DejaVu install via the fallbacks below.
+ */
+const notoSansMono = Noto_Sans_Mono({
+  subsets: ["latin", "latin-ext", "greek", "cyrillic", "cyrillic-ext"],
+  weight: ["400", "500", "700"],
+  display: "swap",
+})
+// Noto Sans Mono ships only Latin/Greek/Cyrillic, so each remaining palette
+// script gets its own Noto face. Without these the Indic, syllabics and
+// symbol glyphs fall through to tofu boxes on any machine lacking a system
+// Noto install (including most Linux servers and many phones).
+const notoKannada = Noto_Sans_Kannada({
+  subsets: ["kannada"],
+  weight: ["400"],
+  display: "swap",
+})
+const notoTelugu = Noto_Sans_Telugu({
+  subsets: ["telugu"],
+  weight: ["400"],
+  display: "swap",
+})
+const notoOriya = Noto_Sans_Oriya({
+  subsets: ["oriya"],
+  weight: ["400"],
+  display: "swap",
+})
+const notoSyllabics = Noto_Sans_Canadian_Aboriginal({
+  subsets: ["canadian-aboriginal"],
+  weight: ["400"],
+  display: "swap",
+})
+const notoSymbols2 = Noto_Sans_Symbols_2({
+  subsets: ["symbols"],
+  weight: ["400"],
+  display: "swap",
+})
+
+/**
+ * Latin/geometric shapes resolve from Noto Sans Mono first; anything it lacks
+ * cascades into the script faces above, then to whatever the platform has.
+ */
+const MONO = [
+  notoSansMono.style.fontFamily,
+  notoSyllabics.style.fontFamily,
+  notoKannada.style.fontFamily,
+  notoTelugu.style.fontFamily,
+  notoOriya.style.fontFamily,
+  notoSymbols2.style.fontFamily,
+  '"Noto Sans Mono CJK SC"',
+  '"Noto Sans CJK SC"',
+  '"DejaVu Sans Mono"',
+  "ui-monospace",
+  "monospace",
+].join(", ")
 
 /** A slot glyph that fades out and back in when its palette index changes. */
 function SlotGlyph({
@@ -216,7 +288,7 @@ const SelfCreature = forwardRef<SelfCreatureHandle, Props>(function SelfCreature
         )
       }
     }
-    // Wait for the pixel font so we probe the font we actually render with.
+    // Wait for webfonts so we probe the exact stack we render with.
     const fonts = (document as Document & { fonts?: FontFaceSet }).fonts
     if (fonts?.ready) void fonts.ready.then(run)
     else run()

@@ -25,22 +25,25 @@
 // PALETTES — softest first, sharpest last. Edit freely.
 // ---------------------------------------------------------------------------
 
-// Every glyph in every palette below was verified to have real coverage in
-// 'Geist Pixel' (the avatar font) — Kannada/Telugu/Canadian-syllabics picks
-// like ಥ ರ ఠ ᒥ ᘳ ୧ render as tofu boxes (▯) and must never be used here.
+// These are the authored palettes, kept verbatim. They deliberately reach into
+// Kannada / Telugu / Oriya / Canadian-syllabics / CJK for shapes no Latin set
+// has, so the avatar is rendered in a wide-coverage monospace stack (see MONO
+// in components/self/self-creature.tsx) rather than the app's pixel font.
+// probePalettes() still runs at mount as a safety net: any glyph the platform
+// genuinely cannot draw degrades to its nearest palette neighbour.
 export const EYES: string[] = [
   "◕ ◕",
   "● ●",
   "◉ ◉",
-  "ᴗ ᴗ",
+  "ಥ ಥ",
   "o o",
   "⊙ ⊙",
   ". .",
   "• •",
   "- -",
-  "ʘ ʘ",
+  "ರ ರ",
   "¬ ¬",
-  "︿ ︿",
+  "ఠ ఠ",
   "> <",
   "× ×",
   "▼ ▼",
@@ -49,9 +52,9 @@ export const EYES: string[] = [
 // NOTE: 〰 carries U+FE0E (text presentation selector) so it can never render
 // as a color emoji on iOS / Android.
 export const MOUTH: string[] = [
-  "ᴗ",
+  "ᗜ",
+  "◡",
   "‿",
-  "ᵕ",
   "ω",
   "▽",
   "o",
@@ -66,26 +69,26 @@ export const MOUTH: string[] = [
   "∧",
   "▼",
   "ʬ",
-  "益",
+  "⍊",
 ]
 
 export type GlyphPair = [string, string]
 
 export const SIDES: GlyphPair[] = [
   ["∩", "∩"],
-  ["╰", "╯"],
+  ["୧", "୨"],
   ["(", ")"],
   ["[", "]"],
   ["{", "}"],
   ["⌐", "¬"],
   ["ʅ", "ʃ"],
-  ["┌", "┐"],
+  ["ᒥ", "ᒧ"],
   ["╚", "╝"],
 ]
 
 export const EARS: GlyphPair[] = [
   ["ʕ", "ʔ"],
-  ["╭", "╮"],
+  ["ᘳ", "ᘰ"],
   ["ε", "϶"],
   ["⌒", "⌒"],
   ["ʖ", "ʗ"],
@@ -94,7 +97,7 @@ export const EARS: GlyphPair[] = [
   ["ᆺ", "ᆺ"],
 ]
 
-export const AURA: string[] = ["·", "˙", "°", "*", "⁖", "⁘"]
+export const AURA: string[] = ["·", "˙", "°", "*", "✦", "⁘"]
 
 // ---------------------------------------------------------------------------
 // BIRTH — before the first read is answered the being is locked to  [ . . ]
