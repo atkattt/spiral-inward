@@ -59,10 +59,6 @@ export function CircleView({
   // or just signing out (progress kept).
   const [leaveConfirm, setLeaveConfirm] = useState(false)
   const [erasing, setErasing] = useState(false)
-  // Whether the universe camera is at its home composition. While the user is
-  // zooming/panning away, the header chrome (exit / menu) fades out.
-  const [atHome, setAtHome] = useState(true)
-
   // The central avatar's resting expression. Per-read reactions (agree /
   // disagree / curious + color) are now driven inside SpiralUniverse itself
   // when an object is tapped, so the base mood here just stays idle.
@@ -158,14 +154,9 @@ export function CircleView({
   return (
     <main className="relative flex min-h-[100dvh] flex-col overflow-hidden">
       {/* Header: exit on the left, burger menu on the top-right corner.
-          White text; fades away while the user explores (camera off home). */}
-      <header
-        className="relative z-30 flex items-center justify-between px-5 pt-6 transition-opacity duration-500"
-        style={{
-          opacity: atHome ? 1 : 0,
-          pointerEvents: atHome ? "auto" : "none",
-        }}
-      >
+          White text; ALWAYS present — even while the camera is zoomed into
+          a read, the user must be able to reach the menu and leave. */}
+      <header className="relative z-30 flex items-center justify-between px-5 pt-6">
         <button
           onClick={handleLeaveClick}
           className="flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-widest text-white transition-colors hover:text-white/80"
@@ -259,7 +250,6 @@ export function CircleView({
           userId={userId}
           guest={guest}
           initialRevealRadius={initialRevealRadius}
-          onHomeChange={setAtHome}
           matchedReads={matchedReads}
           initialResponses={initialResponses}
           guestFragments={guestFragments}
