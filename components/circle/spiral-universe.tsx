@@ -1951,6 +1951,7 @@ export function SpiralUniverse({
                   blinkMaxMs={activeMood.blinkMaxMs}
                   blinkHoldMs={activeMood.blinkHoldMs}
                   ember={activeMood.ember}
+                  lcd
                 />
               </div>
             </div>

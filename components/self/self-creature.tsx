@@ -82,6 +82,10 @@ type Props = {
   blinkHoldMs?: number
   /** crisis reads: a faint ember-like flicker layered into the glow */
   ember?: boolean
+  /** LCD-screen treatment: a subtle RGB sub-pixel grid + scanlines over the
+      glyphs, an inner vignette on the container, and a 0.4px soften on the
+      art — makes upscaled pixelation read as intentional hardware. */
+  lcd?: boolean
 }
 
 // Lay an arbitrary stage skeleton, centered, into the fixed grid envelope so it
@@ -154,6 +158,7 @@ const SelfCreature = forwardRef<SelfCreatureHandle, Props>(function SelfCreature
     blinkMaxMs = 9000,
     blinkHoldMs = 150,
     ember = false,
+    lcd = false,
   },
   ref,
 ) {
@@ -466,7 +471,9 @@ const SelfCreature = forwardRef<SelfCreatureHandle, Props>(function SelfCreature
 
   const evolving = evolvePhase !== "idle"
   const artOpacity = evolvePhase === "out" ? 0 : 1
-  const artBlur = evolvePhase === "out" ? 6 : 0
+  // lcd: a constant 0.4px soften makes upscaled glyph pixels sit naturally
+  // under the LED grid overlay (glow drop-shadow is unaffected).
+  const artBlur = evolvePhase === "out" ? 6 : lcd ? 0.4 : 0
   const evolveScale = evolvePhase === "out" ? 0.9 : 1
 
   // Reaction animation on the whole being.
@@ -501,7 +508,12 @@ const SelfCreature = forwardRef<SelfCreatureHandle, Props>(function SelfCreature
   return (
     <div
       className="relative flex items-center justify-center"
-      style={{ width: size, height: size }}
+      style={{
+        width: size,
+        height: size,
+        // lcd: soft inner vignette — the screen's edge falloff.
+        boxShadow: lcd ? "inset 0 0 60px 20px rgba(0,0,0,0.6)" : undefined,
+      }}
     >
       <style>{CREATURE_KEYFRAMES}</style>
 
@@ -596,6 +608,26 @@ const SelfCreature = forwardRef<SelfCreatureHandle, Props>(function SelfCreature
         })}
       </div>
 
+      {/* lcd: RGB sub-pixel stripes + scanline grid floated ABOVE the glyphs,
+          confined to the avatar container only. Never captures taps. */}
+      {lcd && (
+        <div
+          aria-hidden="true"
+          style={{
+            position: "absolute",
+            inset: 0,
+            pointerEvents: "none",
+            backgroundImage: `repeating-linear-gradient(to right,
+                rgba(255,60,60,.05) 0 .67px,
+                rgba(60,255,120,.05) .67px 1.33px,
+                rgba(80,120,255,.05) 1.33px 2px),
+              repeating-linear-gradient(to bottom,
+                transparent 0 1px, rgba(0,0,0,.55) 1px 2px),
+              repeating-linear-gradient(to right,
+                transparent 0 1px, rgba(0,0,0,.55) 1px 2px)`,
+          }}
+        />
+      )}
     </div>
   )
 })
