@@ -508,12 +508,7 @@ const SelfCreature = forwardRef<SelfCreatureHandle, Props>(function SelfCreature
   return (
     <div
       className="relative flex items-center justify-center"
-      style={{
-        width: size,
-        height: size,
-        // lcd: soft inner vignette — the screen's edge falloff.
-        boxShadow: lcd ? "inset 0 0 60px 20px rgba(0,0,0,0.6)" : undefined,
-      }}
+      style={{ width: size, height: size }}
     >
       <style>{CREATURE_KEYFRAMES}</style>
 
@@ -609,14 +604,21 @@ const SelfCreature = forwardRef<SelfCreatureHandle, Props>(function SelfCreature
       </div>
 
       {/* lcd: RGB sub-pixel stripes + scanline grid floated ABOVE the glyphs,
-          confined to the avatar container only. Never captures taps. */}
+          sized to the glyph board itself (NOT the outer square, which can
+          overflow the sky region and bleed over the read sheet). Carries the
+          inner vignette too. Never captures taps. */}
       {lcd && (
         <div
           aria-hidden="true"
           style={{
             position: "absolute",
-            inset: 0,
+            left: "50%",
+            top: "50%",
+            width: boardW,
+            height: boardH,
+            transform: "translate(-50%, -50%)",
             pointerEvents: "none",
+            boxShadow: "inset 0 0 60px 20px rgba(0,0,0,0.6)",
             backgroundImage: `repeating-linear-gradient(to right,
                 rgba(255,60,60,.05) 0 .67px,
                 rgba(60,255,120,.05) .67px 1.33px,
