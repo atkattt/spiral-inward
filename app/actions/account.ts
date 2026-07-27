@@ -2,8 +2,47 @@
 
 import { createClient } from "@/lib/supabase/server"
 import { db } from "@/lib/db"
-import { userProgress } from "@/lib/db/schema"
+import { people, relationships, userProgress } from "@/lib/db/schema"
 import { eq } from "drizzle-orm"
+
+/**
+ * Erases the signed-in user's JOURNEY — chart, reads, entries, conversations,
+ * people, bonds, and the revealed frontier — while keeping the auth account
+ * and profile. Returning after this starts the experience from the very
+ * beginning (onboarding ritual, ungrown avatar), signed in as the same user.
+ */
+export async function eraseJourney(): Promise<{ error: string | null }> {
+  const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  if (!user) return { error: "not signed in" }
+
+  const userId = user.id
+
+  // Supabase-side journey rows (each RLS-scoped to the user's own id).
+  const results = await Promise.all([
+    supabase.from("charts").delete().eq("profile_id", userId),
+    supabase.from("self_entries").delete().eq("profile_id", userId),
+    supabase.from("conversations").delete().eq("profile_id", userId),
+    supabase.from("read_responses").delete().eq("profile_id", userId),
+  ])
+  const failed = results.find((r) => r.error && r.error.code !== "42P01")
+  if (failed?.error) return { error: failed.error.message }
+
+  // Drizzle-side journey rows: the circle's people + bonds and the fog
+  // frontier (these drive the spiral markers and the avatar's growth).
+  try {
+    await db.delete(relationships).where(eq(relationships.userId, userId))
+    await db.delete(people).where(eq(people.userId, userId))
+    await db.delete(userProgress).where(eq(userProgress.userId, userId))
+  } catch {
+    // tables may not exist yet in older environments — reset still succeeds
+  }
+
+  return { error: null }
+}
 
 /**
  * Permanently deletes the signed-in user's own data rows (chart, reads,

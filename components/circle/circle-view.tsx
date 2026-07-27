@@ -10,6 +10,7 @@ import {
   BIRTH_NORMALIZED_KEY,
   CHART_KEY,
 } from "@/lib/birth-data"
+import { eraseJourney } from "@/app/actions/account"
 import { ConnectDialog } from "@/components/circle/connect-dialog"
 import { PersonDetail, type Bond } from "@/components/circle/person-detail"
 import { SpiralUniverse } from "@/components/circle/spiral-universe"
@@ -48,6 +49,10 @@ export function CircleView({
   const [selected, setSelected] = useState<Person | null>(null)
   const [connectFrom, setConnectFrom] = useState<Person | null>(null)
   const [menuOpen, setMenuOpen] = useState(false)
+  // Leave confirmation: signed-in users choose between erasing the journey
+  // or just signing out (progress kept).
+  const [leaveConfirm, setLeaveConfirm] = useState(false)
+  const [erasing, setErasing] = useState(false)
   // Whether the universe camera is at its home composition. While the user is
   // zooming/panning away, the header chrome (exit / menu) fades out.
   const [atHome, setAtHome] = useState(true)
@@ -87,10 +92,9 @@ export function CircleView({
       .filter((x): x is Bond => x !== null)
   }, [selected, relationships, peopleById])
 
-  async function handleSignOut() {
-    // Leaving is a clean slate: clear the onboarding ritual's stashed birth
-    // data + computed chart so returning starts the ritual fresh instead of
-    // silently reusing the previous profile.
+  function clearLocalStash() {
+    // Clear the onboarding ritual's stashed birth data + computed chart so
+    // returning starts the ritual fresh instead of silently reusing them.
     try {
       for (const key of [BIRTH_DATA_KEY, BIRTH_NORMALIZED_KEY, CHART_KEY]) {
         localStorage.removeItem(key)
@@ -99,14 +103,42 @@ export function CircleView({
     } catch {
       // storage unavailable (private mode) — nothing stashed to clear.
     }
+  }
 
-    // HARD navigation through the server-side sign-out route. Two reasons:
-    // (1) the SpiralProvider lives in the root layout, so soft navigation
-    // would carry the session's reads and grown avatar into the next visit;
-    // (2) client-side cookie deletion is silently dropped in the cross-site
-    // iframe preview — only the server can reliably expire the sb-* cookies
-    // (and the guest cookie) with the right SameSite attributes.
+  // Sign out WITHOUT erasing saved progress. Hard navigation through the
+  // server-side sign-out route: (1) the SpiralProvider lives in the root
+  // layout, so soft navigation would carry in-memory state into the next
+  // visit; (2) client-side cookie deletion is silently dropped in the
+  // cross-site iframe preview — only the server can reliably expire the
+  // sb-* cookies (and the guest cookie) with the right SameSite attributes.
+  function signOutOnly() {
+    clearLocalStash()
     window.location.href = "/auth/signout"
+  }
+
+  // Erase the whole journey server-side (reads, entries, people, avatar
+  // growth), then sign out. Returning starts the experience from the top.
+  async function eraseAndLeave() {
+    setErasing(true)
+    if (!guest) {
+      const { error } = await eraseJourney()
+      if (error) {
+        setErasing(false)
+        setLeaveConfirm(false)
+        return
+      }
+    }
+    signOutOnly()
+  }
+
+  function handleLeaveClick() {
+    // Guests keep nothing server-side — leaving is already a full reset,
+    // no need to ask.
+    if (guest) {
+      signOutOnly()
+      return
+    }
+    setLeaveConfirm(true)
   }
 
   return (
@@ -121,7 +153,7 @@ export function CircleView({
         }}
       >
         <button
-          onClick={handleSignOut}
+          onClick={handleLeaveClick}
           className="flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-widest text-white transition-colors hover:text-white/80"
         >
           <LogOut className="size-3.5" />
@@ -219,6 +251,73 @@ export function CircleView({
           guestFragments={guestFragments}
         />
       </div>
+
+      {/* Leave confirmation — a small centered sheet in the app's terminal
+          idiom. Mobile-first: full-width card with generous tap targets. */}
+      {leaveConfirm && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center p-5 sm:items-center">
+          <button
+            aria-hidden="true"
+            tabIndex={-1}
+            onClick={() => !erasing && setLeaveConfirm(false)}
+            className="absolute inset-0 cursor-default bg-black/70"
+          />
+          <div
+            role="alertdialog"
+            aria-label="leaving?"
+            className="relative flex w-full max-w-sm flex-col gap-4 rounded-2xl p-5"
+            style={{
+              backgroundColor: "#070707",
+              border: "1px solid #1a1a1a",
+              fontFamily: "'Geist Pixel', ui-monospace, monospace",
+            }}
+          >
+            <p className="text-[10px] uppercase tracking-[0.3em] text-muted-foreground/60">
+              leaving?
+            </p>
+            <p
+              className="text-pretty"
+              style={{
+                fontSize: 13.5,
+                lineHeight: 1.65,
+                letterSpacing: 0.3,
+                color: "#8a8a8a",
+              }}
+            >
+              <span style={{ color: "#555" }}>{"› "}</span>
+              erase your journey and start over next time — or just sign out
+              and keep everything as it is?
+            </p>
+            <div className="flex flex-col gap-2.5">
+              <button
+                onClick={eraseAndLeave}
+                disabled={erasing}
+                className="w-full rounded-full border px-4 py-3 text-[11px] uppercase tracking-widest transition-colors disabled:opacity-50"
+                style={{
+                  borderColor: "rgba(224,122,122,0.4)",
+                  color: "#e07a7a",
+                }}
+              >
+                {erasing ? "erasing…" : "erase & leave"}
+              </button>
+              <button
+                onClick={signOutOnly}
+                disabled={erasing}
+                className="w-full rounded-full border border-border px-4 py-3 text-[11px] uppercase tracking-widest text-foreground transition-colors hover:bg-foreground/[0.04] disabled:opacity-50"
+              >
+                just sign out
+              </button>
+              <button
+                onClick={() => setLeaveConfirm(false)}
+                disabled={erasing}
+                className="w-full px-4 py-2 text-[10px] uppercase tracking-widest text-muted-foreground transition-colors hover:text-foreground disabled:opacity-50"
+              >
+                stay
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <PersonDetail
         person={selected}
