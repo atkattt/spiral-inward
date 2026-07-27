@@ -23,6 +23,8 @@ import {
   SECTION_ORDER,
   SECTION_COLORS,
   sectionFor,
+  journeyGrowthEvents,
+  MAJOR_WEIGHT,
   type SectionKey,
 } from "@/lib/spiral/sections"
 
@@ -246,7 +248,6 @@ type Glyph = {
 // major star greets the visitor near the heart of the spiral.
 const READ_T_START_A = 0.3
 const READ_T_START_B = 0.22
-const MAJOR_WEIGHT = 7
 // Arc length (world units) between consecutive reads in the sequence — even
 // spacing, comfortably clear of the widest badge (24px minor).
 const READ_ARC_GAP = 46
@@ -610,22 +611,12 @@ export function SpiralUniverse({
   //     that section's sigil accessory (flavor ties back to the read).
   //   - every OTHER answered minor in a section = a quiet growth event: a
   //     texture detail appears or an existing one matures.
-  const journeyEvents = useMemo<GrowthEvent[]>(() => {
-    const evts: GrowthEvent[] = []
-    for (const s of sections) {
-      let minors = 0
-      for (const r of s.reads) {
-        if (!respondedIds.has(r.read.id)) continue
-        if (r.kind === "major") {
-          evts.push({ kind: "major", flavor: s.key })
-        } else {
-          minors++
-          if (minors % 2 === 0) evts.push({ kind: "minor", flavor: s.key })
-        }
-      }
-    }
-    return evts
-  }, [sections, respondedIds])
+  // Derived by the SHARED helper (lib/spiral/sections.ts) so /self renders
+  // the exact same creature from the same fragments + responses.
+  const journeyEvents = useMemo<GrowthEvent[]>(
+    () => journeyGrowthEvents(fragments, respondedIds),
+    [fragments, respondedIds],
+  )
   // Disc size follows the creature's evolution (see discSizeFor), from the
   // same journey events SelfCreature renders.
   const creatureStage = stageForMajors(

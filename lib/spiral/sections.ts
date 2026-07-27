@@ -100,3 +100,69 @@ export function sectionFor(
 ): SectionKey {
   return sectionOf(section) ?? deriveSection(triggerType, condition)
 }
+
+// ---------------------------------------------------------------------------
+// Journey growth — the SINGLE derivation of the self creature's growth events
+// from matched fragments + the user's responses. Both the spiral (/circle)
+// and the self page (/self) MUST use this so the avatar is identical on both:
+//   - each answered MAJOR (a section's heaviest weight>=7 read) = a big
+//     event: skeleton stage-up + that section's sigil accessory.
+//   - every OTHER answered minor within a section = a quiet texture event.
+// ---------------------------------------------------------------------------
+
+/** A read's major/minor threshold — a section's star needs weight >= 7. */
+export const MAJOR_WEIGHT = 7
+
+/** The minimal fragment shape the journey derivation needs. */
+export type JourneyFragment = {
+  id: string
+  weight: number | null
+  section?: string | null
+  trigger_type: string | null
+  condition: unknown
+}
+
+export type JourneyGrowthEvent = {
+  kind: "major" | "minor"
+  /** section key of the read that caused it — flavors sigil accessories */
+  flavor: string
+}
+
+export function journeyGrowthEvents(
+  fragments: JourneyFragment[],
+  respondedIds: ReadonlySet<string>,
+): JourneyGrowthEvent[] {
+  // Group by section, exactly like the spiral's walk builder.
+  const groups = new Map<SectionKey, JourneyFragment[]>()
+  for (const f of fragments) {
+    const key = sectionFor(f.section, f.trigger_type, f.condition)
+    const g = groups.get(key)
+    if (g) g.push(f)
+    else groups.set(key, [f])
+  }
+  const present = SECTION_ORDER.filter((s) => groups.has(s))
+
+  const evts: JourneyGrowthEvent[] = []
+  for (const key of present) {
+    // Weight sorts; the heaviest weight>=7 read is THE major (heaviest
+    // overall stands in when none reaches the threshold), the rest are minis.
+    const frags = [...groups.get(key)!].sort(
+      (a, b) => (b.weight ?? 0) - (a.weight ?? 0),
+    )
+    const majorIdx = frags.findIndex((f) => (f.weight ?? 0) >= MAJOR_WEIGHT)
+    const majorFrag = frags[majorIdx === -1 ? 0 : majorIdx]
+    const ordered = [majorFrag, ...frags.filter((f) => f !== majorFrag)]
+
+    let minors = 0
+    ordered.forEach((f, j) => {
+      if (!respondedIds.has(f.id)) return
+      if (j === 0) {
+        evts.push({ kind: "major", flavor: key })
+      } else {
+        minors++
+        if (minors % 2 === 0) evts.push({ kind: "minor", flavor: key })
+      }
+    })
+  }
+  return evts
+}

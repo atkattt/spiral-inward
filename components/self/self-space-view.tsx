@@ -1,17 +1,16 @@
 "use client"
 
-import { useCallback, useRef, useState } from "react"
+import { useCallback, useMemo, useRef, useState } from "react"
 import Link from "next/link"
 import { ArrowLeft, Lock } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
 import SelfCreature, { type SelfCreatureHandle } from "@/components/self/self-creature"
 import { Starfield } from "@/components/starfield"
-import { useSpiral } from "@/components/spiral/spiral-provider"
 import { SelfChat } from "@/components/self/self-chat"
 import { SelfReads } from "@/components/self/self-reads"
 import { SelfView } from "@/components/spiral/self-view"
 import { CHAT_UNLOCK_RADIUS, unlockProgress } from "@/lib/self/unlock"
-import { engagementScore } from "@/lib/self/avatar-stages"
+import { journeyGrowthEvents } from "@/lib/spiral/sections"
 import type { SelfReadsData } from "@/lib/self/reads-data"
 
 const MONO =
@@ -30,10 +29,10 @@ export function SelfSpaceView({
   const progress = unlockProgress(revealRadius)
   const unlocked = revealRadius >= CHAT_UNLOCK_RADIUS
 
-  // The creature's stage is driven by REAL engagement: each read_responses row
-  // (agree or disagree) = 1 point, each saved answer = 3 points. We seed from
-  // the loaded data and update live as the reads UI below fires, so the avatar
-  // can evolve in place the moment a new stage is crossed.
+  // THE SAME BEING AS /circle: the creature's stage + accreted details are
+  // derived by the shared journeyGrowthEvents helper from the same matched
+  // fragments and read_responses the spiral uses — so whatever the self looks
+  // like at the center of the spiral, it looks identical here.
   const creatureRef = useRef<SelfCreatureHandle>(null)
   // Judging reads now lives on the spiral (/circle); here the set is a
   // read-only seed from what's already been answered.
@@ -43,14 +42,10 @@ export function SelfSpaceView({
   const [answeredIds, setAnsweredIds] = useState<Set<string>>(
     () => new Set(reads ? Object.keys(reads.answers) : []),
   )
-  // Reflections saved from the History screen feed the same growth engine:
-  // every kept/released read the user committed is an extra point of self-
-  // knowledge the creature builds from.
-  const { savedReflectionPoints } = useSpiral()
-  const score = engagementScore({
-    responses: respondedIds.size + savedReflectionPoints,
-    answers: answeredIds.size,
-  })
+  const growthEvents = useMemo(
+    () => journeyGrowthEvents(reads?.matched ?? [], respondedIds),
+    [reads, respondedIds],
+  )
 
   const handleAnswer = useCallback((fragmentId: string) => {
     creatureRef.current?.react("submit")
@@ -93,7 +88,7 @@ export function SelfSpaceView({
             <div className="relative flex h-full w-full items-center justify-center overflow-hidden">
               <SelfCreature
                 ref={creatureRef}
-                score={score}
+                growthEvents={growthEvents}
                 seed={userId}
                 size={230}
                 color="#e8e4da"
