@@ -5,6 +5,7 @@ import { db } from "@/lib/db"
 import { people, relationships } from "@/lib/db/schema"
 import { and, asc, eq, inArray, or } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
+import { SELF_PERSON_ID } from "@/lib/relationships"
 
 async function getUserId() {
   const supabase = await createClient()
@@ -39,6 +40,8 @@ type AddPersonInput = {
   birthTime?: string | null
   birthTimeUnknown: boolean
   birthPlace?: string | null
+  /** who they are TO YOU — creates the you↔them bond on add */
+  kind?: string | null
 }
 
 export async function addPerson(input: AddPersonInput) {
@@ -61,6 +64,15 @@ export async function addPerson(input: AddPersonInput) {
       posY,
     })
     .returning()
+
+  // A person in your sky is never unbound: adding them IS the bond to your
+  // self. SELF_PERSON_ID (0) stands in for you as the from-endpoint.
+  await db.insert(relationships).values({
+    userId,
+    fromPersonId: SELF_PERSON_ID,
+    toPersonId: created.id,
+    kind: input.kind?.trim() || "friend",
+  })
 
   revalidatePath("/circle")
   return created
@@ -113,17 +125,16 @@ export async function addRelationship(
   const userId = await getUserId()
   if (fromPersonId === toPersonId) throw new Error("Cannot connect a person to themselves")
 
-  // Verify both people belong to this user.
+  // Verify both endpoints belong to this user. SELF_PERSON_ID stands in for
+  // the user themself and needs no people row.
+  const realIds = [fromPersonId, toPersonId].filter(
+    (id) => id !== SELF_PERSON_ID,
+  )
   const owned = await db
     .select({ id: people.id })
     .from(people)
-    .where(
-      and(
-        eq(people.userId, userId),
-        inArray(people.id, [fromPersonId, toPersonId]),
-      ),
-    )
-  if (owned.length !== 2) throw new Error("Invalid people")
+    .where(and(eq(people.userId, userId), inArray(people.id, realIds)))
+  if (owned.length !== realIds.length) throw new Error("Invalid people")
 
   const [created] = await db
     .insert(relationships)

@@ -6,6 +6,7 @@ import SelfCreature, { type SelfCreatureHandle } from "@/components/self/self-cr
 import type { Person, Relationship } from "@/lib/db/schema"
 import { useSpiral } from "@/components/spiral/spiral-provider"
 import { makePersonRead, type Read } from "@/lib/spiral/reads"
+import { SELF_PERSON_ID } from "@/lib/relationships"
 import { stageForMajors, type GrowthEvent } from "@/lib/self/avatar-stages"
 import { UniverseReadPanel, type PanelData } from "@/components/circle/universe-read-panel"
 import { saveRevealRadius } from "@/app/actions/progress"
@@ -1132,12 +1133,19 @@ export function SpiralUniverse({
   }, [people, colorById])
 
   // BONDS — faint dashed lines between connected people, in world coords.
+  // SELF_PERSON_ID endpoints resolve to the world origin (0,0), where the
+  // self creature is anchored — the auto you↔them bond points at YOU.
   const bonds = useMemo<PlacedBond[]>(() => {
     const byId = new Map(placedPeople.map((pp) => [pp.person.id, pp]))
+    const pointOf = (personId: number): { x: number; y: number } | null => {
+      if (personId === SELF_PERSON_ID) return { x: 0, y: 0 }
+      const pp = byId.get(personId)
+      return pp ? { x: pp.x, y: pp.y } : null
+    }
     const out: PlacedBond[] = []
     for (const r of relationships) {
-      const a = byId.get(r.fromPersonId)
-      const b = byId.get(r.toPersonId)
+      const a = pointOf(r.fromPersonId)
+      const b = pointOf(r.toPersonId)
       if (!a || !b) continue
       out.push({ id: r.id, x1: a.x, y1: a.y, x2: b.x, y2: b.y })
     }

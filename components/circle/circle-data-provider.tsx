@@ -10,6 +10,7 @@ import {
 } from "react"
 import { useRouter } from "next/navigation"
 import type { Person, Relationship } from "@/lib/db/schema"
+import { SELF_PERSON_ID } from "@/lib/relationships"
 import {
   addPerson as addPersonAction,
   addRelationship as addRelationshipAction,
@@ -23,6 +24,8 @@ export type AddPersonInput = {
   birthTime?: string | null
   birthTimeUnknown: boolean
   birthPlace?: string | null
+  /** who they are TO YOU — creates the you↔them bond on add */
+  kind?: string | null
 }
 
 type CircleData = {
@@ -83,6 +86,18 @@ export function CircleDataProvider({
           createdAt: new Date(),
         }
         setGuestPeople((p) => [...p, person])
+        // Same rule as the server: adding someone bonds them to your self.
+        setGuestRels((r) => [
+          ...r,
+          {
+            id: seq.current--,
+            userId: "guest",
+            fromPersonId: SELF_PERSON_ID,
+            toPersonId: person.id,
+            kind: input.kind?.trim() || "friend",
+            createdAt: new Date(),
+          },
+        ])
         return
       }
       await addPersonAction(input)

@@ -4,7 +4,12 @@ import { useMemo, useState } from "react"
 import Link from "next/link"
 import { ArrowLeft } from "lucide-react"
 import type { Person } from "@/lib/db/schema"
-import { RELATIONSHIP_LABELS, type RelationshipKind } from "@/lib/relationships"
+import {
+  RELATIONSHIP_LABELS,
+  SELF_PERSON_ID,
+  makeSelfPerson,
+  type RelationshipKind,
+} from "@/lib/relationships"
 import { Starfield } from "@/components/starfield"
 import { buildColorMap } from "@/lib/circle/colors"
 import { useCircleData } from "@/components/circle/circle-data-provider"
@@ -30,6 +35,8 @@ export function BondsView() {
   const peopleById = useMemo(() => {
     const map = new Map<number, Person>()
     for (const p of people) map.set(p.id, p)
+    // The user themself is a valid bond endpoint (the auto you↔them bond).
+    map.set(SELF_PERSON_ID, makeSelfPerson(people[0]?.userId ?? "self"))
     return map
   }, [people])
 

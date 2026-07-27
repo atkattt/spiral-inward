@@ -4,7 +4,12 @@ import { useMemo, useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import type { Person } from "@/lib/db/schema"
-import { RELATIONSHIP_LABELS, type RelationshipKind } from "@/lib/relationships"
+import {
+  RELATIONSHIP_LABELS,
+  SELF_PERSON_ID,
+  makeSelfPerson,
+  type RelationshipKind,
+} from "@/lib/relationships"
 import {
   BIRTH_DATA_KEY,
   BIRTH_NORMALIZED_KEY,
@@ -66,6 +71,8 @@ export function CircleView({
   const peopleById = useMemo(() => {
     const map = new Map<number, Person>()
     for (const p of people) map.set(p.id, p)
+    // The user themself is a valid bond endpoint (the auto you↔them bond).
+    map.set(SELF_PERSON_ID, makeSelfPerson(people[0]?.userId ?? "self"))
     return map
   }, [people])
 

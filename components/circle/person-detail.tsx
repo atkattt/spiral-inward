@@ -14,6 +14,7 @@ import { Link2, Trash2, X, ChevronRight } from "lucide-react"
 import { ReadCard } from "@/components/spiral/read-card"
 import { useSpiral } from "@/components/spiral/spiral-provider"
 import { makeBondRead, makePersonRead } from "@/lib/spiral/reads"
+import { isSelfId } from "@/lib/relationships"
 
 const MONO =
   "'Geist Pixel', ui-monospace, monospace"
@@ -208,7 +209,11 @@ export function PersonDetail({
                 <ul className="flex flex-col gap-2">
                   {bonds.map((b) => {
                     const isOpen = openBondId === b.relationship.id
-                    const bondRead = makeBondRead(b.relationship.id, b.other.name)
+                    // The auto you↔them bond: the "other" endpoint is the
+                    // user themself, so the row reads "{person} × You".
+                    const isSelfBond = isSelfId(b.other.id)
+                    const displayName = isSelfBond ? person.name : b.other.name
+                    const bondRead = makeBondRead(b.relationship.id, displayName)
                     return (
                       <li key={b.relationship.id} className="flex flex-col gap-2">
                         <div
@@ -237,7 +242,7 @@ export function PersonDetail({
                               style={{ color: "#555" }}
                             />
                             <span>
-                              {b.other.name}
+                              {displayName}
                               <span style={{ color: "#555" }}> × </span>
                               You
                               <span style={{ color: "#4a4a4a" }}>
@@ -253,7 +258,7 @@ export function PersonDetail({
                             disabled={isPending}
                             className="transition-colors hover:text-destructive"
                             style={{ color: "#555" }}
-                            aria-label={`Remove bond with ${b.other.name}`}
+                            aria-label={`Remove bond with ${displayName}`}
                           >
                             <X className="size-4" />
                           </button>
@@ -268,7 +273,7 @@ export function PersonDetail({
                           ) : (
                             <ReadCard
                               read={bondRead}
-                              label={`${b.other.name} × You`}
+                              label={`${displayName} × You`}
                               onResolved={() => setOpenBondId(null)}
                             />
                           ))}
