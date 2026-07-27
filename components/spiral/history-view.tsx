@@ -133,7 +133,7 @@ export function HistoryView() {
             className="text-pretty font-serif text-base font-light lowercase text-foreground"
             style={{ textWrap: "balance" }}
           >
-            your history
+            your reads
           </p>
           <p
             style={{
@@ -145,9 +145,9 @@ export function HistoryView() {
             }}
           >
             <span style={{ color: "#555" }}>{"› "}</span>
-            every read you kept, every one you released, and the bonds between.
-            nothing here is deleted, and nothing is final — keep or release,
-            anytime.
+            everything you&apos;ve claimed and everything you let go. tap any
+            read to revisit. release what stops fitting. bring back what
+            returns.
           </p>
         </section>
 

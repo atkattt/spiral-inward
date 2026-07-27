@@ -6,7 +6,6 @@ import { useRouter } from "next/navigation"
 import type { Person } from "@/lib/db/schema"
 import { createClient } from "@/lib/supabase/client"
 import { RELATIONSHIP_LABELS, type RelationshipKind } from "@/lib/relationships"
-import { AddPersonDialog } from "@/components/circle/add-person-dialog"
 import { ConnectDialog } from "@/components/circle/connect-dialog"
 import { PersonDetail, type Bond } from "@/components/circle/person-detail"
 import { SpiralUniverse } from "@/components/circle/spiral-universe"
@@ -16,7 +15,7 @@ import type { Mood } from "@/components/circle/SelfAvatar"
 import { buildColorMap } from "@/lib/circle/colors"
 import { useCircleData } from "@/components/circle/circle-data-provider"
 
-import { Plus, LogOut, Clock, PenLine, Menu, X, Info, Star, User } from "lucide-react"
+import { LogOut, Clock, Menu, X, Info, Star, User, Users } from "lucide-react"
 
 export function CircleView({
   userName,
@@ -42,7 +41,6 @@ export function CircleView({
 }) {
   const router = useRouter()
   const { guest, people, relationships } = useCircleData()
-  const [addOpen, setAddOpen] = useState(false)
   const [selected, setSelected] = useState<Person | null>(null)
   const [connectFrom, setConnectFrom] = useState<Person | null>(null)
   const [menuOpen, setMenuOpen] = useState(false)
@@ -154,40 +152,32 @@ export function CircleView({
                   Menu
                 </div>
                 <MenuItem
-                  icon={<Plus className="size-4" />}
-                  label="Add person"
-                  onClick={() => {
-                    setMenuOpen(false)
-                    setAddOpen(true)
-                  }}
-                />
-                <MenuItem
-                  icon={<Clock className="size-4" />}
-                  label="History"
-                  href="/history"
-                  onNavigate={() => setMenuOpen(false)}
-                />
-                <MenuItem
-                  icon={<PenLine className="size-4" />}
-                  label="What you know"
-                  href="/what-you-know"
-                  onNavigate={() => setMenuOpen(false)}
-                />
-                <MenuItem
                   icon={<Star className="size-4" />}
                   label="Self"
                   href="/self"
                   onNavigate={() => setMenuOpen(false)}
                 />
                 <MenuItem
+                  icon={<Users className="size-4" />}
+                  label="Bonds"
+                  href="/bonds"
+                  onNavigate={() => setMenuOpen(false)}
+                />
+                <MenuItem
+                  icon={<Clock className="size-4" />}
+                  label="Your reads"
+                  href="/history"
+                  onNavigate={() => setMenuOpen(false)}
+                />
+                <MenuItem
                   icon={<Info className="size-4" />}
-                  label="What this is"
+                  label="About"
                   href="/about"
                   onNavigate={() => setMenuOpen(false)}
                 />
                 <MenuItem
                   icon={<User className="size-4" />}
-                  label="Profile"
+                  label="Account"
                   href="/profile"
                   onNavigate={() => setMenuOpen(false)}
                 />
@@ -217,7 +207,6 @@ export function CircleView({
         />
       </div>
 
-      <AddPersonDialog open={addOpen} onOpenChange={setAddOpen} />
       <PersonDetail
         person={selected}
         bonds={selectedBonds}

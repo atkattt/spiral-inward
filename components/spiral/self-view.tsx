@@ -1,17 +1,14 @@
 "use client"
 
 import { useMemo, useRef, useState } from "react"
-import Link from "next/link"
 import { toast } from "sonner"
-import { ArrowLeft, Paperclip } from "lucide-react"
-import { Starfield } from "@/components/starfield"
+import { Paperclip } from "lucide-react"
 import { useSpiral } from "@/components/spiral/spiral-provider"
 import type { Truth, TruthScope } from "@/lib/spiral/reads"
 
-// The /self page's visual idiom, matched exactly: bg-background sky,
-// #070707 panels with #1a1a1a hairlines (rounded-2xl), tiny uppercase
-// #4a4a4a section labels, 13.5px mono body in dim greys with "›" prefixes,
-// and a single serif light lowercase caption line.
+// The /self page's visual idiom, matched exactly: #070707 panels with
+// #1a1a1a hairlines (rounded-2xl), tiny uppercase #4a4a4a section labels,
+// 13.5px mono body in dim greys with "›" prefixes.
 const MONO = "'Geist Pixel', ui-monospace, monospace"
 
 const TABS: { id: TruthScope; label: string }[] = [
