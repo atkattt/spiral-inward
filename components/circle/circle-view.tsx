@@ -4,7 +4,6 @@ import { useMemo, useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import type { Person } from "@/lib/db/schema"
-import { createClient } from "@/lib/supabase/client"
 import { RELATIONSHIP_LABELS, type RelationshipKind } from "@/lib/relationships"
 import {
   BIRTH_DATA_KEY,
@@ -101,18 +100,13 @@ export function CircleView({
       // storage unavailable (private mode) — nothing stashed to clear.
     }
 
-    if (guest) {
-      document.cookie = "spiral_guest=; Max-Age=0; path=/"
-      // HARD navigation, not router.push: the SpiralProvider lives in the
-      // root layout, so a soft navigation would carry the session's reads,
-      // reflection points, and the grown self avatar straight through to the
-      // next visit. A full reload resets every in-memory provider.
-      window.location.href = "/"
-      return
-    }
-    const supabase = createClient()
-    await supabase.auth.signOut()
-    window.location.href = "/"
+    // HARD navigation through the server-side sign-out route. Two reasons:
+    // (1) the SpiralProvider lives in the root layout, so soft navigation
+    // would carry the session's reads and grown avatar into the next visit;
+    // (2) client-side cookie deletion is silently dropped in the cross-site
+    // iframe preview — only the server can reliably expire the sb-* cookies
+    // (and the guest cookie) with the right SameSite attributes.
+    window.location.href = "/auth/signout"
   }
 
   return (

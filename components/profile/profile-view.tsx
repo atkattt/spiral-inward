@@ -101,11 +101,12 @@ export function ProfileView({
     }
   }
 
-  async function handleSignOut() {
+  // Both exits go through the SERVER sign-out route: client-side cookie
+  // deletion is silently dropped in the cross-site iframe preview, so only
+  // the server can reliably expire the sb-* auth cookies.
+  function handleSignOut() {
     clearLocalStash()
-    const supabase = createClient()
-    await supabase.auth.signOut()
-    window.location.href = "/"
+    window.location.href = "/auth/signout"
   }
 
   async function handleDelete() {
@@ -117,11 +118,9 @@ export function ProfileView({
       setDeleteError(error)
       return
     }
-    // Data is gone and the server cleared the session; also clear the client.
+    // Data is gone; the sign-out route clears the session cookies.
     clearLocalStash()
-    const supabase = createClient()
-    await supabase.auth.signOut()
-    window.location.href = "/"
+    window.location.href = "/auth/signout"
   }
 
   return (
