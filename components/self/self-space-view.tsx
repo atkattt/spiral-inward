@@ -105,7 +105,7 @@ export function SelfSpaceView({
 
         {/* 2 — Talk to your self (gated) */}
         <section className="flex flex-col gap-3">
-          <SectionLabel>talk to your self</SectionLabel>
+          <SectionLabel centered>talk to your self</SectionLabel>
           {unlocked ? <SelfChat /> : <LockedChat progress={progress} />}
         </section>
 
@@ -195,7 +195,13 @@ function GoogleSignInLink() {
   )
 }
 
-function SectionLabel({ children }: { children: React.ReactNode }) {
+function SectionLabel({
+  children,
+  centered,
+}: {
+  children: React.ReactNode
+  centered?: boolean
+}) {
   return (
     <span
       style={{
@@ -204,6 +210,7 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
         textTransform: "uppercase",
         color: "#4a4a4a",
         fontFamily: MONO,
+        textAlign: centered ? "center" : undefined,
       }}
     >
       {children}
