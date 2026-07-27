@@ -9,6 +9,8 @@ import {
   BIRTH_NORMALIZED_KEY,
   CHART_KEY,
   normalizeBirthData,
+  readBirthStashStamp,
+  stampBirthStash,
   type RawBirthData,
 } from "@/lib/birth-data"
 
@@ -244,6 +246,10 @@ export default function ThresholdScreen({ onEnter }: { onEnter: () => void }) {
           }),
         )
         localStorage.setItem(CHART_KEY, JSON.stringify(chart))
+        // Refresh the provenance stamp, preserving any existing owner (and the
+        // original creation time) so the chart can't be adopted by a different
+        // account later on this browser.
+        stampBirthStash(readBirthStashStamp()?.ownerId ?? null)
       } catch (err) {
         if (!cancelled) {
           setError(err instanceof Error ? err.message : "the read failed")

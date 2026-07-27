@@ -10,11 +10,7 @@ import {
   makeSelfPerson,
   type RelationshipKind,
 } from "@/lib/relationships"
-import {
-  BIRTH_DATA_KEY,
-  BIRTH_NORMALIZED_KEY,
-  CHART_KEY,
-} from "@/lib/birth-data"
+import { clearBirthStash } from "@/lib/birth-data"
 import { toast } from "sonner"
 import { eraseJourney } from "@/app/actions/account"
 import { ConnectDialog } from "@/components/circle/connect-dialog"
@@ -97,16 +93,11 @@ export function CircleView({
   }, [selected, relationships, peopleById])
 
   function clearLocalStash() {
-    // Clear the onboarding ritual's stashed birth data + computed chart so
-    // returning starts the ritual fresh instead of silently reusing them.
-    try {
-      for (const key of [BIRTH_DATA_KEY, BIRTH_NORMALIZED_KEY, CHART_KEY]) {
-        localStorage.removeItem(key)
-        sessionStorage.removeItem(key)
-      }
-    } catch {
-      // storage unavailable (private mode) — nothing stashed to clear.
-    }
+    // Clear the onboarding ritual's stashed birth data + computed chart (and
+    // its ownership stamp) so returning starts the ritual fresh instead of
+    // silently reusing them — and so the next account to sign in on this
+    // browser can never inherit this person's chart.
+    clearBirthStash()
   }
 
   // Sign out WITHOUT erasing saved progress. Hard navigation through the

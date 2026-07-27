@@ -1,6 +1,7 @@
 "use client"
 
 import { useRouter } from "next/navigation"
+import { BIRTH_DATA_KEY, stampBirthStash } from "@/lib/birth-data"
 import TerminalOnboarding from "@/components/TerminalOnboarding"
 import SwirlCloudSky from "@/components/SwirlCloudSky"
 import AsciiRippleSky from "@/components/AsciiRippleSky"
@@ -33,7 +34,10 @@ export default function OnboardingPage() {
         // read them. localStorage (not sessionStorage) so the stash survives
         // sign-in flows that land in a new tab (email confirm link, OAuth).
         try {
-          localStorage.setItem("spiral_birth_data", JSON.stringify(data))
+          localStorage.setItem(BIRTH_DATA_KEY, JSON.stringify(data))
+          // Stamp it anonymous + now, so a stash that's abandoned here can
+          // never be adopted later by a different account on this browser.
+          stampBirthStash(null)
         } catch {
           // localStorage may be unavailable (private mode); proceed anyway.
         }

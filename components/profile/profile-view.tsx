@@ -5,11 +5,7 @@ import Link from "next/link"
 import { ArrowLeft } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
 import { deleteAccount } from "@/app/actions/account"
-import {
-  BIRTH_DATA_KEY,
-  BIRTH_NORMALIZED_KEY,
-  CHART_KEY,
-} from "@/lib/birth-data"
+import { clearBirthStash } from "@/lib/birth-data"
 import { Starfield } from "@/components/starfield"
 import { Button } from "@/components/ui/button"
 
@@ -91,14 +87,7 @@ export function ProfileView({
   // carry this session's reads and the grown self avatar into the next
   // visit. Also clear the onboarding ritual's stashed birth data + chart.
   function clearLocalStash() {
-    try {
-      for (const key of [BIRTH_DATA_KEY, BIRTH_NORMALIZED_KEY, CHART_KEY]) {
-        localStorage.removeItem(key)
-        sessionStorage.removeItem(key)
-      }
-    } catch {
-      // storage unavailable (private mode) — nothing stashed to clear.
-    }
+    clearBirthStash()
   }
 
   // Both exits go through the SERVER sign-out route: client-side cookie

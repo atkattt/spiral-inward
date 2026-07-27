@@ -71,7 +71,7 @@ export default async function CirclePage() {
         initialPeople={people}
         initialRelationships={relationships}
       >
-        <BirthChartBootstrap />
+        <BirthChartBootstrap userId={user.id} />
         <CircleView
           userName={userName}
           initialRevealRadius={revealRadius}

@@ -3,9 +3,12 @@
 import { useEffect, useRef } from "react"
 import { useRouter } from "next/navigation"
 import {
-  BIRTH_DATA_KEY,
   BIRTH_NORMALIZED_KEY,
   CHART_KEY,
+  canConsumeBirthStash,
+  clearBirthStash,
+  readBirthStashStamp,
+  stampBirthStash,
 } from "@/lib/birth-data"
 import {
   ensureUserChart,
@@ -30,9 +33,16 @@ type StoredNormalized = {
  * asks the server to ensure a chart exists (recomputing from stored birth data,
  * or routing to /onboarding when the profile still holds placeholder data).
  *
+ * The stash lives in localStorage, which outlives sign-out — so it is only
+ * consumed when it actually belongs to the current user (see
+ * canConsumeBirthStash). A stash claimed by a different account, or an
+ * abandoned anonymous one that has gone stale, is discarded instead of being
+ * silently adopted, which would otherwise hand a brand-new account the
+ * previous person's birth chart.
+ *
  * Renders nothing.
  */
-export function BirthChartBootstrap() {
+export function BirthChartBootstrap({ userId }: { userId: string }) {
   const router = useRouter()
   const ran = useRef(false)
 
@@ -49,21 +59,31 @@ export function BirthChartBootstrap() {
         dashas: unknown
       } | null = null
 
-      try {
-        // localStorage first (survives new-tab sign-in flows like the email
-        // confirm link or OAuth); sessionStorage as a legacy fallback.
-        const rawNorm =
-          localStorage.getItem(BIRTH_NORMALIZED_KEY) ??
-          sessionStorage.getItem(BIRTH_NORMALIZED_KEY)
-        const rawChart =
-          localStorage.getItem(CHART_KEY) ?? sessionStorage.getItem(CHART_KEY)
-        if (rawNorm && rawChart) {
-          normalized = JSON.parse(rawNorm)
-          chart = JSON.parse(rawChart)
+      // Refuse a stash that belongs to someone else (or an abandoned anonymous
+      // one that has expired) BEFORE reading it, and wipe it so it can't be
+      // adopted on a later load either.
+      if (!canConsumeBirthStash(userId, readBirthStashStamp())) {
+        clearBirthStash()
+      } else {
+        try {
+          // localStorage first (survives new-tab sign-in flows like the email
+          // confirm link or OAuth); sessionStorage as a legacy fallback.
+          const rawNorm =
+            localStorage.getItem(BIRTH_NORMALIZED_KEY) ??
+            sessionStorage.getItem(BIRTH_NORMALIZED_KEY)
+          const rawChart =
+            localStorage.getItem(CHART_KEY) ?? sessionStorage.getItem(CHART_KEY)
+          if (rawNorm && rawChart) {
+            normalized = JSON.parse(rawNorm)
+            chart = JSON.parse(rawChart)
+            // Claim it, so a competing tab or a later sign-in as a different
+            // account can no longer consume this same chart.
+            stampBirthStash(userId)
+          }
+        } catch {
+          normalized = null
+          chart = null
         }
-      } catch {
-        normalized = null
-        chart = null
       }
 
       // A fresh chart is waiting from onboarding — persist it.
@@ -98,10 +118,7 @@ export function BirthChartBootstrap() {
 
         // Only clear on success so a transient failure can retry next load.
         if (res.status === "saved") {
-          for (const key of [BIRTH_DATA_KEY, BIRTH_NORMALIZED_KEY, CHART_KEY]) {
-            localStorage.removeItem(key)
-            sessionStorage.removeItem(key)
-          }
+          clearBirthStash()
           // The page server-rendered BEFORE this chart existed, so its
           // matched reads (first star, mini reads, hint text) are empty —
           // re-render the server props now that the chart is saved.
