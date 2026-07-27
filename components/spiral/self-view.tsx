@@ -51,7 +51,7 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
 
 export function SelfView() {
   const { truths, addTruth } = useSpiral()
-  const [text, setText] = useState("i'm someone who…\n")
+  const [text, setText] = useState("")
   const fileRef = useRef<HTMLInputElement>(null)
 
   function handleSubmit() {
@@ -104,7 +104,7 @@ export function SelfView() {
           value={text}
           onChange={(e) => setText(e.target.value)}
           rows={4}
-          placeholder="something you know to be true…"
+          placeholder="i'm someone who…"
           className="w-full resize-none bg-transparent outline-none placeholder:text-[#4a4a4a]"
           style={{
             fontFamily: MONO,
