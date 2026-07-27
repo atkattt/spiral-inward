@@ -9,6 +9,7 @@ import { Starfield } from "@/components/starfield"
 import { useSpiral } from "@/components/spiral/spiral-provider"
 import { SelfChat } from "@/components/self/self-chat"
 import { SelfReads } from "@/components/self/self-reads"
+import { SelfView } from "@/components/spiral/self-view"
 import { CHAT_UNLOCK_RADIUS, unlockProgress } from "@/lib/self/unlock"
 import { engagementScore } from "@/lib/self/avatar-stages"
 import type { SelfReadsData } from "@/lib/self/reads-data"
@@ -113,7 +114,11 @@ export function SelfSpaceView({
           {unlocked ? <SelfChat /> : <LockedChat progress={progress} />}
         </section>
 
-        {/* 3 — The growing chart: only APPROVED reads surface here, grouped
+        {/* 3 — What you know: write things down in your own words, keep them,
+            send them to the self. Lives here now instead of its own page. */}
+        <SelfView />
+
+        {/* 4 — The growing chart: only APPROVED reads surface here, grouped
             and colored by the same section accents as the spiral's stars. It
             fills in as the journey is walked — never shown in full up front. */}
         <section className="flex flex-col gap-5">

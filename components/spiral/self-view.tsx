@@ -78,48 +78,31 @@ export function SelfView() {
     e.target.value = ""
   }
 
+  // An embeddable section (no page shell) — it lives inside /self's layout,
+  // under its own "what you know" section label.
   return (
-    <main className="relative flex min-h-[100dvh] flex-col bg-background">
-      <Starfield count={70} />
-
-      {/* Header — identical to /self's */}
-      <header className="relative z-20 flex items-center px-5 pt-6">
-        <Link
-          href="/circle"
-          className="flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-widest text-muted-foreground transition-colors hover:text-foreground"
+    <div className="flex flex-col gap-10">
+      {/* 1 — Section intro, in /self's mono subline voice */}
+      <section className="flex flex-col gap-3">
+        <SectionLabel>what you know</SectionLabel>
+        <p
+          style={{
+            fontSize: 13.5,
+            lineHeight: 1.65,
+            letterSpacing: 0.3,
+            color: "#6a6a6a",
+            fontFamily: MONO,
+          }}
         >
-          <ArrowLeft className="size-3.5" />
-          back
-        </Link>
-      </header>
+          <span style={{ color: "#555" }}>{"› "}</span>
+          your own words, unprompted. you are always the authority here — the
+          sky listens, it never argues.
+        </p>
+      </section>
 
-      <div className="relative z-10 mx-auto flex w-full max-w-md flex-1 flex-col gap-10 px-5 pb-24 pt-6">
-        {/* 1 — Title, in /self's serif caption voice */}
-        <section className="flex flex-col gap-3">
-          <p
-            className="font-serif text-base font-light lowercase text-foreground"
-            style={{ textWrap: "balance" }}
-          >
-            what you know about yourself
-          </p>
-          <p
-            style={{
-              fontSize: 13.5,
-              lineHeight: 1.65,
-              letterSpacing: 0.3,
-              color: "#6a6a6a",
-              fontFamily: MONO,
-            }}
-          >
-            <span style={{ color: "#555" }}>{"› "}</span>
-            your own words, unprompted. you are always the authority here —
-            the sky listens, it never argues.
-          </p>
-        </section>
-
-        {/* 2 — Write one down */}
-        <section className="flex flex-col gap-3">
-          <SectionLabel>write one down</SectionLabel>
+      {/* 2 — Write one down */}
+      <section className="flex flex-col gap-3">
+        <SectionLabel>write one down</SectionLabel>
 
           {/* Scope toggles — ●/○ text idiom */}
           <div className="flex gap-5">
@@ -209,21 +192,20 @@ export function SelfView() {
           </div>
         </section>
 
-        {/* 3 — Kept entries. Saving quietly settles the entry into the list —
-            no sky commentary. Tap (mobile) or hover (desktop) an entry to
-            reveal its three quiet actions. */}
-        {visible.length > 0 && (
-          <section className="flex flex-col gap-3">
-            <SectionLabel>kept</SectionLabel>
-            <ul className="flex flex-col gap-4">
-              {visible.map((t) => (
-                <EntryCard key={t.id} truth={t} />
-              ))}
-            </ul>
-          </section>
-        )}
-      </div>
-    </main>
+      {/* 3 — Kept entries. Saving quietly settles the entry into the list —
+          no sky commentary. Tap (mobile) or hover (desktop) an entry to
+          reveal its three quiet actions. */}
+      {visible.length > 0 && (
+        <section className="flex flex-col gap-3">
+          <SectionLabel>kept</SectionLabel>
+          <ul className="flex flex-col gap-4">
+            {visible.map((t) => (
+              <EntryCard key={t.id} truth={t} />
+            ))}
+          </ul>
+        </section>
+      )}
+    </div>
   )
 }
 
