@@ -7,7 +7,7 @@ import { BondsView } from "@/components/circle/bonds-view"
 
 export const metadata = {
   title: "Bonds · Spiral Inward",
-  description: "The people in your sky.",
+  description: "The people in your life, added to your chart.",
 }
 
 export default async function BondsPage() {

@@ -107,8 +107,8 @@ export function BondsView() {
             }}
           >
             <span style={{ color: "#555" }}>{"› "}</span>
-            the people in your sky. each one grows as you read about each
-            other.
+            the people in your life, added to your chart. the more you read
+            about someone, the fuller their profile gets.
           </p>
         </section>
 
@@ -137,7 +137,7 @@ export function BondsView() {
               }}
             >
               <span style={{ color: "#555" }}>{"› "}</span>
-              no one here yet. add someone and their star joins your spiral.
+              no one here yet
             </p>
           ) : (
             <ul className="flex flex-col gap-3">
@@ -206,21 +206,24 @@ export function BondsView() {
             </ul>
           )}
 
-          {/* + add someone — quiet lowercase action, same register as
-              what-you-know's entry actions */}
+          {/* add someone — a real bordered pill, same idiom as the
+              "add to spiral" button on /self */}
           <button
             onClick={() => setAddOpen(true)}
-            className="mt-1 self-start"
+            className="mt-2 self-center"
             style={{
-              background: "none",
-              border: "none",
-              padding: 0,
-              cursor: "pointer",
+              background: "transparent",
+              border: "1px solid #f5f5f5",
+              color: "#f5f5f5",
               fontFamily: MONO,
               fontSize: 10,
               letterSpacing: 2,
               textTransform: "uppercase",
-              color: "#8a8a8a",
+              padding: "9px 18px",
+              borderRadius: 30,
+              cursor: "pointer",
+              whiteSpace: "nowrap",
+              transition: "border-color .2s, color .2s",
             }}
           >
             + add someone
