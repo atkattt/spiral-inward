@@ -31,8 +31,27 @@ export async function eraseJourney(): Promise<{ error: string | null }> {
   const failed = results.find((r) => r.error && r.error.code !== "42P01")
   if (failed?.error) return { error: failed.error.message }
 
+  // Reset the profile's birth data back to the placeholder the DB trigger
+  // seeds new profiles with. Without this, ensureUserChart() would silently
+  // RECOMPUTE the chart from the retained birth data and skip onboarding —
+  // the journey wouldn't actually restart. ("pending" is the trigger's
+  // placeholder convention; see app/actions/birth-chart.ts.)
+  const { error: profileError } = await supabase
+    .from("profiles")
+    .update({
+      birth_date: null,
+      birth_time: null,
+      birth_place: "pending",
+      birth_lat: null,
+      birth_lng: null,
+      timezone: null,
+    })
+    .eq("id", userId)
+  if (profileError) return { error: profileError.message }
+
   // Drizzle-side journey rows: the circle's people + bonds and the fog
   // frontier (these drive the spiral markers and the avatar's growth).
+  // relationships first — it references people.
   try {
     await db.delete(relationships).where(eq(relationships.userId, userId))
     await db.delete(people).where(eq(people.userId, userId))
@@ -86,10 +105,13 @@ export async function deleteAccount(): Promise<{ error: string | null }> {
     return { error: failed.error.message }
   }
 
-  // The revealed-frontier row lives in the Drizzle-managed database
-  // (user_progress, keyed by userId), not Supabase — delete it there so the
-  // fog reveal also starts over. Tolerate a missing table.
+  // Neon-side rows (Drizzle): the circle's people + bonds and the revealed
+  // frontier all live there, keyed by userId — delete them so nothing of the
+  // account's journey survives. relationships first (it references people).
+  // Tolerate missing tables in older environments.
   try {
+    await db.delete(relationships).where(eq(relationships.userId, userId))
+    await db.delete(people).where(eq(people.userId, userId))
     await db.delete(userProgress).where(eq(userProgress.userId, userId))
   } catch {
     // table may not exist yet — journey reset still succeeds
