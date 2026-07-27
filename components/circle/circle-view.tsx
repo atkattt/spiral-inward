@@ -6,6 +6,11 @@ import { useRouter } from "next/navigation"
 import type { Person } from "@/lib/db/schema"
 import { createClient } from "@/lib/supabase/client"
 import { RELATIONSHIP_LABELS, type RelationshipKind } from "@/lib/relationships"
+import {
+  BIRTH_DATA_KEY,
+  BIRTH_NORMALIZED_KEY,
+  CHART_KEY,
+} from "@/lib/birth-data"
 import { ConnectDialog } from "@/components/circle/connect-dialog"
 import { PersonDetail, type Bond } from "@/components/circle/person-detail"
 import { SpiralUniverse } from "@/components/circle/spiral-universe"
@@ -84,6 +89,18 @@ export function CircleView({
   }, [selected, relationships, peopleById])
 
   async function handleSignOut() {
+    // Leaving is a clean slate: clear the onboarding ritual's stashed birth
+    // data + computed chart so returning starts the ritual fresh instead of
+    // silently reusing the previous profile.
+    try {
+      for (const key of [BIRTH_DATA_KEY, BIRTH_NORMALIZED_KEY, CHART_KEY]) {
+        localStorage.removeItem(key)
+        sessionStorage.removeItem(key)
+      }
+    } catch {
+      // storage unavailable (private mode) — nothing stashed to clear.
+    }
+
     if (guest) {
       document.cookie = "spiral_guest=; Max-Age=0; path=/"
       router.push("/")
