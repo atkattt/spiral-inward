@@ -102,6 +102,10 @@ export function BirthChartBootstrap() {
             localStorage.removeItem(key)
             sessionStorage.removeItem(key)
           }
+          // The page server-rendered BEFORE this chart existed, so its
+          // matched reads (first star, mini reads, hint text) are empty —
+          // re-render the server props now that the chart is saved.
+          router.refresh()
         } else if (res.status !== "unauthenticated") {
           console.log("[v0] persistBirthChart:", res)
         }
@@ -112,6 +116,10 @@ export function BirthChartBootstrap() {
       const res = await ensureUserChart()
       if (res.status === "needs_onboarding") {
         router.replace("/onboarding")
+      } else if (res.status === "ready" && res.recomputed) {
+        // Same race as above: the chart was just recomputed from stored
+        // birth data, after the empty server render. Refresh to surface it.
+        router.refresh()
       } else if (res.status === "error") {
         console.log("[v0] ensureUserChart:", res.message)
       }

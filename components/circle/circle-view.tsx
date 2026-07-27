@@ -10,6 +10,7 @@ import {
   BIRTH_NORMALIZED_KEY,
   CHART_KEY,
 } from "@/lib/birth-data"
+import { toast } from "sonner"
 import { eraseJourney } from "@/app/actions/account"
 import { ConnectDialog } from "@/components/circle/connect-dialog"
 import { PersonDetail, type Bond } from "@/components/circle/person-detail"
@@ -123,6 +124,9 @@ export function CircleView({
     if (!guest) {
       const { error } = await eraseJourney()
       if (error) {
+        // Do NOT sign out on a failed erase — the user would come back to a
+        // half-erased journey believing it was reset. Tell them and stay.
+        toast("the sky couldn't let go — try again in a moment")
         setErasing(false)
         setLeaveConfirm(false)
         return

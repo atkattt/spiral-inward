@@ -82,7 +82,10 @@ export async function persistBirthChart(
 }
 
 export type EnsureChartResult =
-  | { status: "ready" } // a chart row exists (or was just recomputed)
+  // recomputed=true means the chart row did NOT exist when the page rendered
+  // and was just created — callers must refresh so server-computed props
+  // (matched reads, first star) pick it up.
+  | { status: "ready"; recomputed: boolean }
   | { status: "needs_onboarding" } // profile still holds placeholder data
   | { status: "unauthenticated" }
   | { status: "error"; message: string }
@@ -127,7 +130,7 @@ export async function ensureUserChart(): Promise<EnsureChartResult> {
     .maybeSingle()
 
   if (existingError) return { status: "error", message: existingError.message }
-  if (existing) return { status: "ready" }
+  if (existing) return { status: "ready", recomputed: false }
 
   // Recompute from the stored birth data and insert.
   try {
@@ -141,7 +144,7 @@ export async function ensureUserChart(): Promise<EnsureChartResult> {
     })
     const upsertError = await upsertChart(supabase, user.id, chart)
     if (upsertError) return { status: "error", message: upsertError }
-    return { status: "ready" }
+    return { status: "ready", recomputed: true }
   } catch (err) {
     const message = err instanceof Error ? err.message : "recompute failed"
     return { status: "error", message }
