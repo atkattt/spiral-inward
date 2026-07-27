@@ -51,7 +51,7 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
 
 export function SelfView() {
   const { truths, addTruth } = useSpiral()
-  const [text, setText] = useState("")
+  const [text, setText] = useState("i'm someone who…\n")
   const fileRef = useRef<HTMLInputElement>(null)
 
   function handleSubmit() {
