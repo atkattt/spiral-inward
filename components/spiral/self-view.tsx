@@ -1,20 +1,15 @@
 "use client"
 
-import { useMemo, useRef, useState } from "react"
+import { useRef, useState } from "react"
 import { toast } from "sonner"
 import { Paperclip } from "lucide-react"
 import { useSpiral } from "@/components/spiral/spiral-provider"
-import type { Truth, TruthScope } from "@/lib/spiral/reads"
+import type { Truth } from "@/lib/spiral/reads"
 
 // The /self page's visual idiom, matched exactly: #070707 panels with
 // #1a1a1a hairlines (rounded-2xl), tiny uppercase #4a4a4a section labels,
 // 13.5px mono body in dim greys with "›" prefixes.
 const MONO = "'Geist Pixel', ui-monospace, monospace"
-
-const TABS: { id: TruthScope; label: string }[] = [
-  { id: "about-me", label: "about me" },
-  { id: "about-bond", label: "about a bond" },
-]
 
 // Same surface as /self's locked-chat panel.
 const panelStyle: React.CSSProperties = {
@@ -56,19 +51,13 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
 
 export function SelfView() {
   const { truths, addTruth } = useSpiral()
-  const [scope, setScope] = useState<TruthScope>("about-me")
   const [text, setText] = useState("")
   const fileRef = useRef<HTMLInputElement>(null)
-
-  const visible = useMemo(
-    () => truths.filter((t) => t.scope === scope),
-    [truths, scope],
-  )
 
   function handleSubmit() {
     const trimmed = text.trim()
     if (!trimmed) return
-    addTruth(trimmed, scope)
+    addTruth(trimmed, "about-me")
     setText("")
   }
 
@@ -78,12 +67,21 @@ export function SelfView() {
     e.target.value = ""
   }
 
-  // An embeddable section (no page shell) — it lives inside /self's layout,
-  // under its own "what you know" section label.
+  // An embeddable section (no page shell) — it lives inside /self's layout.
+  // The whole "what you know" block sits in its own curved card, the same
+  // rounded idiom the onboarding ritual card uses.
   return (
-    <div className="flex flex-col gap-10">
+    <section
+      className="flex flex-col gap-6"
+      style={{
+        background: "#070707",
+        border: "1px solid #1a1a1a",
+        borderRadius: 28,
+        padding: 20,
+      }}
+    >
       {/* 1 — Section intro, in /self's mono subline voice */}
-      <section className="flex flex-col gap-3">
+      <div className="flex flex-col gap-3">
         <SectionLabel>what you know</SectionLabel>
         <p
           style={{
@@ -98,114 +96,80 @@ export function SelfView() {
           your own words, unprompted. you are always the authority here — the
           sky listens, it never argues.
         </p>
-      </section>
+      </div>
 
-      {/* 2 — Write one down */}
-      <section className="flex flex-col gap-3">
-        <SectionLabel>write one down</SectionLabel>
-
-          {/* Scope toggles — ●/○ text idiom */}
-          <div className="flex gap-5">
-            {TABS.map((t) => {
-              const selected = scope === t.id
-              return (
-                <button
-                  key={t.id}
-                  onClick={() => setScope(t.id)}
-                  style={{
-                    background: "none",
-                    border: "none",
-                    padding: 0,
-                    cursor: "pointer",
-                    fontFamily: MONO,
-                    fontSize: 10,
-                    letterSpacing: 2,
-                    textTransform: "uppercase",
-                    color: selected ? "#f5f5f5" : "#4a4a4a",
-                  }}
-                >
-                  {(selected ? "● " : "○ ") + t.label}
-                </button>
-              )
-            })}
-          </div>
-
-          <div style={panelStyle}>
-            <textarea
-              value={text}
-              onChange={(e) => setText(e.target.value)}
-              rows={4}
-              placeholder={
-                scope === "about-me"
-                  ? "something you know to be true about yourself…"
-                  : "something you know to be true about a bond…"
-              }
-              className="w-full resize-none bg-transparent outline-none placeholder:text-[#4a4a4a]"
-              style={{
-                fontFamily: MONO,
-                fontSize: 13.5,
-                letterSpacing: 0.3,
-                lineHeight: 1.65,
-                color: "#e8e4da",
-                caretColor: "#e8e4da",
-              }}
-            />
-            <div
-              className="mt-3 flex items-center justify-between gap-3 pt-3"
-              style={{ borderTop: "1px solid #1a1a1a" }}
-            >
-              <button
-                onClick={() => fileRef.current?.click()}
-                className="inline-flex items-center gap-1.5 transition-colors"
-                style={actionStyle}
-              >
-                <Paperclip className="size-3.5" />
-                attach a test
-              </button>
-              <input
-                ref={fileRef}
-                type="file"
-                accept=".pdf,.txt,.csv,.json,image/*"
-                onChange={handleAttach}
-                className="hidden"
-              />
-              <button
-                onClick={handleSubmit}
-                disabled={!text.trim()}
-                style={{
-                  background: "transparent",
-                  border: `1px solid ${text.trim() ? "#f5f5f5" : "#2a2a2a"}`,
-                  color: text.trim() ? "#f5f5f5" : "#4a4a4a",
-                  fontFamily: MONO,
-                  fontSize: 10,
-                  letterSpacing: 2,
-                  textTransform: "uppercase",
-                  padding: "9px 18px",
-                  borderRadius: 30,
-                  cursor: text.trim() ? "pointer" : "default",
-                  transition: "border-color .2s, color .2s",
-                }}
-              >
-                {"add to your spiral ⏎"}
-              </button>
-            </div>
-          </div>
-        </section>
+      {/* 2 — The composer */}
+      <div style={panelStyle}>
+        <textarea
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          rows={4}
+          placeholder="something you know to be true…"
+          className="w-full resize-none bg-transparent outline-none placeholder:text-[#4a4a4a]"
+          style={{
+            fontFamily: MONO,
+            fontSize: 13.5,
+            letterSpacing: 0.3,
+            lineHeight: 1.65,
+            color: "#e8e4da",
+            caretColor: "#e8e4da",
+          }}
+        />
+        <div
+          className="mt-3 flex items-center justify-between gap-3 pt-3"
+          style={{ borderTop: "1px solid #1a1a1a" }}
+        >
+          <button
+            onClick={() => fileRef.current?.click()}
+            className="inline-flex items-center gap-1.5 transition-colors"
+            style={actionStyle}
+          >
+            <Paperclip className="size-3.5" />
+            attach a test
+          </button>
+          <input
+            ref={fileRef}
+            type="file"
+            accept=".pdf,.txt,.csv,.json,image/*"
+            onChange={handleAttach}
+            className="hidden"
+          />
+          <button
+            onClick={handleSubmit}
+            disabled={!text.trim()}
+            style={{
+              background: "transparent",
+              border: `1px solid ${text.trim() ? "#f5f5f5" : "#2a2a2a"}`,
+              color: text.trim() ? "#f5f5f5" : "#4a4a4a",
+              fontFamily: MONO,
+              fontSize: 10,
+              letterSpacing: 2,
+              textTransform: "uppercase",
+              padding: "9px 18px",
+              borderRadius: 30,
+              cursor: text.trim() ? "pointer" : "default",
+              transition: "border-color .2s, color .2s",
+            }}
+          >
+            add to spiral
+          </button>
+        </div>
+      </div>
 
       {/* 3 — Kept entries. Saving quietly settles the entry into the list —
           no sky commentary. Tap (mobile) or hover (desktop) an entry to
           reveal its three quiet actions. */}
-      {visible.length > 0 && (
-        <section className="flex flex-col gap-3">
+      {truths.length > 0 && (
+        <div className="flex flex-col gap-3">
           <SectionLabel>kept</SectionLabel>
           <ul className="flex flex-col gap-4">
-            {visible.map((t) => (
+            {truths.map((t) => (
               <EntryCard key={t.id} truth={t} />
             ))}
           </ul>
-        </section>
+        </div>
       )}
-    </div>
+    </section>
   )
 }
 
