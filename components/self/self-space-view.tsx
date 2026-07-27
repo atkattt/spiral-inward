@@ -92,6 +92,8 @@ export function SelfSpaceView({
                 seed={userId}
                 size={230}
                 color="#e8e4da"
+                lcd
+                lcdSize={172}
               />
             </div>
           </div>

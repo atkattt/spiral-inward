@@ -86,6 +86,12 @@ type Props = {
       glyphs, an inner vignette on the container, and a 0.4px soften on the
       art — makes upscaled pixelation read as intentional hardware. */
   lcd?: boolean
+  /** Diameter of the lit screen, for avatars that sit in a circular bezel.
+      When set, the screen is a circle of exactly this size (pass the parent's
+      disc diameter so the glass fills the bezel) with the vignette scaled to
+      match. Omit for the free-floating panel-stage being, which keeps its
+      board-sized rectangular screen. */
+  lcdSize?: number
 }
 
 // Lay an arbitrary stage skeleton, centered, into the fixed grid envelope so it
@@ -159,6 +165,7 @@ const SelfCreature = forwardRef<SelfCreatureHandle, Props>(function SelfCreature
     blinkHoldMs = 150,
     ember = false,
     lcd = false,
+    lcdSize,
   },
   ref,
 ) {
@@ -469,6 +476,35 @@ const SelfCreature = forwardRef<SelfCreatureHandle, Props>(function SelfCreature
     return { x: boardW / 2 - bboxCenterX, y: boardH / 2 - bboxCenterY }
   }, [skelLines, grid.rows, grid.cols, cellW, rowH, boardW, boardH])
 
+  // LED/LCD geometry. The sub-pixel pitch stays FIXED at 2px either way (real
+  // hardware has a fixed pixel pitch, so a small avatar reads as the same
+  // screen as the big one). What changes is the shape and falloff:
+  //   • lcdSize given → a round screen filling the bezel, vignette scaled to
+  //     it (the panel stage's 60px falloff would swallow a 170px avatar).
+  //   • no lcdSize → the original board-sized rectangular screen.
+  const lcdMetrics = useMemo(() => {
+    if (lcdSize) {
+      // 0 at ~150px screens (spiral center) → 1 at ~480px
+      const t = Math.max(0, Math.min(1, (lcdSize - 150) / 330))
+      return {
+        w: lcdSize,
+        h: lcdSize,
+        radius: "50%",
+        blur: Math.max(14, lcdSize * 0.16),
+        spread: Math.max(4, lcdSize * 0.05),
+        gridAlpha: 0.34 + t * 0.21,
+      }
+    }
+    return {
+      w: boardW,
+      h: boardH,
+      radius: "0px",
+      blur: 60,
+      spread: 20,
+      gridAlpha: 0.55,
+    }
+  }, [lcdSize, boardW, boardH])
+
   const evolving = evolvePhase !== "idle"
   const artOpacity = evolvePhase === "out" ? 0 : 1
   // lcd: a constant 0.4px soften makes upscaled glyph pixels sit naturally
@@ -614,19 +650,20 @@ const SelfCreature = forwardRef<SelfCreatureHandle, Props>(function SelfCreature
             position: "absolute",
             left: "50%",
             top: "50%",
-            width: boardW,
-            height: boardH,
+            width: lcdMetrics.w,
+            height: lcdMetrics.h,
             transform: "translate(-50%, -50%)",
             pointerEvents: "none",
-            boxShadow: "inset 0 0 60px 20px rgba(0,0,0,0.6)",
+            borderRadius: lcdMetrics.radius,
+            boxShadow: `inset 0 0 ${lcdMetrics.blur}px ${lcdMetrics.spread}px rgba(0,0,0,0.6)`,
             backgroundImage: `repeating-linear-gradient(to right,
                 rgba(255,60,60,.05) 0 .67px,
                 rgba(60,255,120,.05) .67px 1.33px,
                 rgba(80,120,255,.05) 1.33px 2px),
               repeating-linear-gradient(to bottom,
-                transparent 0 1px, rgba(0,0,0,.55) 1px 2px),
+                transparent 0 1px, rgba(0,0,0,${lcdMetrics.gridAlpha}) 1px 2px),
               repeating-linear-gradient(to right,
-                transparent 0 1px, rgba(0,0,0,.55) 1px 2px)`,
+                transparent 0 1px, rgba(0,0,0,${lcdMetrics.gridAlpha}) 1px 2px)`,
           }}
         />
       )}

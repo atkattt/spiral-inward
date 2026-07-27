@@ -1808,6 +1808,8 @@ export function SpiralUniverse({
             seed={userId ?? "guest-journey"}
             color={reactColor ?? NEUTRAL_COLOR}
             size={creatureSize}
+            lcd
+            lcdSize={discSize}
           />
         </div>
           {/* Tap target over the face → opens the chart read sheet. Still
