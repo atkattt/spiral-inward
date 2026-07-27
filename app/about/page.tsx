@@ -6,7 +6,7 @@ import { StoryReadCards } from "@/components/threshold/story-read-cards"
 export const metadata = {
   title: "What this is · Spiral Inward",
   description:
-    "What Spiral Inward is, and where it's going — a mirror that listens before it speaks.",
+    "What Spiral Inward is, and how it works — a mirror that listens before it speaks.",
 }
 
 export default function AboutPage() {
@@ -27,7 +27,7 @@ export default function AboutPage() {
 
       <div className="relative z-10 mx-auto max-w-md px-7 pb-24 pt-4">
         <p className="font-mono text-[10px] uppercase tracking-[0.3em] text-muted-foreground/70">
-          What this is, where it&apos;s going
+          What this is, how it works
         </p>
 
         <StoryReadCards />

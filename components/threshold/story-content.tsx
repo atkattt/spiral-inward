@@ -30,26 +30,27 @@ export const STORY_SECTIONS: StorySection[] = [
     title: "What this is",
     body: [
       {
-        text: "Spiral Inward begins with the exact moment you arrived, and draws a first sketch of who that made you — through the Vedic lens, and a few others layered quietly beneath it.\n\nIt does not tell you who you are. It ",
-        fontSize: 13,
-        lineHeight: "0.3em",
-      },
-      { text: "proposes", glow: true, fontSize: 12 },
-      {
-        text: ", and waits for you to answer. Everything you agree with sharpens the picture. Everything you reject becomes a portrait drawn in negative space.",
+        text: "spiral inward starts with the exact time and place you were born. it reads that moment through vedic astrology and makes a first sketch of who you are.\n\nthat's just the first lens. keep going and new ones unlock: other schools of astrology, other ways of mapping a person. same birth moment, different angle every time.\n\nit won't tell you who you are. it ",
         fontSize: 12,
       },
-    ],
-  },
-  {
-    title: "Where it's going",
-    body: [
+      { text: "asks", glow: true, fontSize: 12 },
       {
-        text: "You'll add the people who matter, and see the shape of each bond. You'll tell the sky things no chart could know, and watch them sit beside what the stars suggested — kept as tension when they disagree, never corrected.\n\nOver time the spiral becomes less the sky's guess and more ",
+        text: ". you decide what's true, and slowly the chart stops being the sky's guess and starts being ",
         fontSize: 12,
       },
       { text: "yours", glow: true, fontSize: 12 },
-      { text: "." },
+      { text: ".", fontSize: 12 },
+    ],
+  },
+  {
+    title: "How it works",
+    body: [
+      {
+        text: "every read is a small claim about you. keep the ones that fit, release the ones that don't. both shape your chart.\n\nyou can add your own words too: things you know about yourself that no chart could guess. and you can add your people, to see how your charts connect.\n\nwork through enough reads and the next lens opens. the more you respond, the more the spiral becomes ",
+        fontSize: 12,
+      },
+      { text: "yours", glow: true, fontSize: 12 },
+      { text: ".", fontSize: 12 },
     ],
   },
   {
