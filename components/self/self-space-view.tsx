@@ -132,7 +132,7 @@ export function SelfSpaceView({
             >
               <span style={{ color: "#555" }}>{"› "}</span>
               <GoogleSignInLink />
-              {" to watch your chart assemble itself."}
+              {" to save your chart and see it grow."}
             </p>
           )}
         </section>
@@ -242,8 +242,8 @@ function LockedChat({ progress }: { progress: number }) {
           maxWidth: 260,
         }}
       >
-        your self doesn&apos;t have enough to say yet. keep exploring the spiral
-        and unlocking reads — this conversation opens as you go deeper.
+        this chat unlocks once we know you a little better. add more entries
+        and open a few reads to get there.
       </p>
 
       {/* Progress toward unlock */}
@@ -271,7 +271,7 @@ function LockedChat({ progress }: { progress: number }) {
             fontFamily: MONO,
           }}
         >
-          {pct}% toward opening
+          {pct}% unlocked
         </span>
       </div>
     </div>

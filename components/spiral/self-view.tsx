@@ -1,8 +1,6 @@
 "use client"
 
-import { useRef, useState } from "react"
-import { toast } from "sonner"
-import { Paperclip } from "lucide-react"
+import { useState } from "react"
 import { useSpiral } from "@/components/spiral/spiral-provider"
 import type { Truth } from "@/lib/spiral/reads"
 
@@ -52,19 +50,12 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
 export function SelfView() {
   const { truths, addTruth } = useSpiral()
   const [text, setText] = useState("")
-  const fileRef = useRef<HTMLInputElement>(null)
 
   function handleSubmit() {
     const trimmed = text.trim()
     if (!trimmed) return
     addTruth(trimmed, "about-me")
     setText("")
-  }
-
-  function handleAttach(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]
-    if (file) toast(`attached ${file.name} — we'll read it in later`)
-    e.target.value = ""
   }
 
   // An embeddable section (no page shell) — it lives inside /self's layout.
@@ -93,8 +84,8 @@ export function SelfView() {
           }}
         >
           <span style={{ color: "#555" }}>{"› "}</span>
-          your own words, unprompted. you are always the authority here — the
-          sky listens, it never argues.
+          write anything you know about yourself. a trait, a habit, a
+          feeling. whatever you add here shapes your chart.
         </p>
       </div>
 
@@ -116,24 +107,9 @@ export function SelfView() {
           }}
         />
         <div
-          className="mt-3 flex items-center justify-between gap-3 pt-3"
+          className="mt-3 flex items-center justify-center pt-3"
           style={{ borderTop: "1px solid #1a1a1a" }}
         >
-          <button
-            onClick={() => fileRef.current?.click()}
-            className="inline-flex items-center gap-1.5 transition-colors"
-            style={actionStyle}
-          >
-            <Paperclip className="size-3.5" />
-            attach a test
-          </button>
-          <input
-            ref={fileRef}
-            type="file"
-            accept=".pdf,.txt,.csv,.json,image/*"
-            onChange={handleAttach}
-            className="hidden"
-          />
           <button
             onClick={handleSubmit}
             disabled={!text.trim()}
@@ -149,6 +125,7 @@ export function SelfView() {
               borderRadius: 30,
               cursor: text.trim() ? "pointer" : "default",
               transition: "border-color .2s, color .2s",
+              whiteSpace: "nowrap",
             }}
           >
             add to spiral
