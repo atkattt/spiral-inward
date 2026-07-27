@@ -4,6 +4,7 @@ import Link from "next/link"
 import SwirlCloudSky from "@/components/SwirlCloudSky"
 import AsciiRippleSky from "@/components/AsciiRippleSky"
 import { AuthForm } from "@/components/auth-form"
+import { GlyphFlickerText } from "@/components/glyph-flicker-text"
 
 export default async function SignUpPage() {
   const supabase = await createClient()
@@ -23,13 +24,14 @@ export default async function SignUpPage() {
       <SwirlCloudSky />
       <AsciiRippleSky />
 
-      {/* quiet wordmark — this may be a visitor's first screen, so the app
-          still names itself, just softly */}
+      {/* Wordmark — this may be a visitor's first screen, so the app names
+          itself. Letters flicker into ascii glyphs and back, the same feel as
+          the loading screen's morphing display. */}
       <Link
         href="/"
-        className="absolute top-8 left-1/2 z-10 -translate-x-1/2 font-mono text-[10px] lowercase tracking-[0.25em] text-muted-foreground transition-colors hover:text-foreground"
+        className="absolute top-8 left-1/2 z-10 -translate-x-1/2 font-mono text-[10px] lowercase tracking-[0.25em] text-foreground"
       >
-        spiral inward
+        <GlyphFlickerText text="spiral inward" />
       </Link>
 
       {/* The button sits at the exact center of the page — which is the center
