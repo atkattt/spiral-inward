@@ -51,7 +51,7 @@ export const EYES: string[] = [
 export const MOUTH: string[] = [
   "ᴗ",
   "‿",
-  "⌣\uFE0E",
+  "ᵕ",
   "ω",
   "▽",
   "o",
