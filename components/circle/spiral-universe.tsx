@@ -858,10 +858,21 @@ export function SpiralUniverse({
     (agreeIt: boolean) => {
       const current = panel
       if (!current) return
-      ;(window as unknown as { __judgeCount?: number }).__judgeCount =
-        ((window as unknown as { __judgeCount?: number }).__judgeCount ?? 0) + 1
-      if (agreeIt) agree(current.read)
-      else disagree(current.read, "skip")
+      /**
+       * Also deferred. `agree`/`disagree` write to the spiral provider, which
+       * recomputes `respondedIds` -> `reads` -> the marker layer, and that
+       * landed in the same blocking commit as the press. Measured: the pressed
+       * attribute flipped at ~210ms and the green wash only reached the screen
+       * at ~444ms. Deferring both heavy writes lets the acknowledgement paint
+       * on the next frame (~25ms) while the universe catches up behind it.
+       *
+       * Safe to defer because the panel latches its own choice locally, so the
+       * confirmation never depends on this state round-tripping back down.
+       */
+      startTransition(() => {
+        if (agreeIt) agree(current.read)
+        else disagree(current.read, "skip")
+      })
       // Fragment reads persist to read_responses — the SAME table /self
       // writes — so both surfaces always show the same saved responses.
       // Guests keep session-only state (their chart never left the browser).
@@ -912,7 +923,6 @@ export function SpiralUniverse({
        * the fog rolls outward in a follow-up render. The 250ms of work still
        * happens; it just stops blocking the acknowledgement.
        */
-      ;(window as unknown as { __revealTarget?: number }).__revealTarget = nextR
       startTransition(() => setRevealRadius(nextR))
       if (reactTimer.current) clearTimeout(reactTimer.current)
       reactTimer.current = setTimeout(() => {

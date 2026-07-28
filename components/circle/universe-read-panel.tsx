@@ -312,12 +312,23 @@ function CmdButton({
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
       aria-pressed={chosen}
-      className="flex-1 rounded-lg px-2.5 py-3 text-[13px] tracking-wide transition-all"
+      className="flex-1 rounded-lg px-2.5 py-3 text-[13px] tracking-wide"
       style={{
         background: palette.bg,
         border: `1px solid ${palette.border}`,
         color: palette.color,
         fontFamily: "inherit",
+        /**
+         * The confirmation must SNAP; only hover eases.
+         *
+         * With a blanket `transition-all`, the pressed styles animated in over
+         * the default duration, so even though React committed the new state on
+         * the next frame (~20ms) the button still LOOKED untouched — the green
+         * wash didn't finish arriving until ~460ms. Since a press is meant to
+         * feel instantaneous, `chosen` paints with no transition at all and the
+         * idle/hover states keep their soft fade.
+         */
+        transition: chosen ? "none" : "background .18s ease, border-color .18s ease, color .18s ease, opacity .18s ease",
         // The unpicked command fades back rather than disappearing, so the
         // panel doesn't visibly reflow while it's on its way out.
         opacity: dimmed ? 0.35 : 1,
