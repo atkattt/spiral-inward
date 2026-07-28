@@ -24,8 +24,10 @@ import { eq } from "drizzle-orm"
  *      every error. A single failure on `relationships` silently skipped
  *      `people` AND `user_progress` too, and reported success.
  *
- * Now each statement reports its own row count, a real failure names its table,
- * and only a genuinely missing table (42P01, older environments) is tolerated.
+ * Now each statement reports its own row count, the Supabase side is then
+ * re-queried to CONFIRM the rows are actually gone (a count of 0 is not proof —
+ * see the note in clearJourneyRows), a real failure names its table, and only a
+ * genuinely missing table (42P01, older environments) is tolerated.
  */
 
 /** Supabase journey tables, all keyed by `profile_id` and RLS-scoped. */
@@ -52,9 +54,6 @@ async function clearJourneyRows(
 
   // --- Supabase side -------------------------------------------------------
   // `.select("id")` makes the delete report the rows it actually removed.
-  // Every one of these tables has both a select_own and delete_own RLS policy,
-  // so a zero count here means the rows genuinely weren't there, not that RLS
-  // quietly refused.
   const results = await Promise.all(
     SUPABASE_JOURNEY_TABLES.map((table) =>
       supabase.from(table).delete().eq("profile_id", userId).select("id"),
@@ -67,6 +66,39 @@ async function clearJourneyRows(
       return { error: `${table}: ${result.error.message}`, counts }
     }
     counts[table] = result.data?.length ?? 0
+  }
+
+  // Then CONFIRM the rows are actually gone, rather than trusting the counts.
+  //
+  // This is the check that catches what actually broke a reset: under RLS a
+  // DELETE whose USING clause doesn't match is not an error — the rows are
+  // filtered out, nothing is removed, and PostgREST still returns 200 with an
+  // empty body. Row counts alone can't tell that apart from "already empty",
+  // which is how an erased account came back with its answered reads still lit.
+  //
+  // A SELECT is trustworthy here even if the DELETE policy is broken, because
+  // the app demonstrably reads these rows back (that's what lights the spiral),
+  // so select_own is known to work. Anything still visible after the delete is
+  // a delete that silently did nothing.
+  const leftovers = await Promise.all(
+    SUPABASE_JOURNEY_TABLES.map((table) =>
+      supabase
+        .from(table)
+        .select("id", { count: "exact", head: true })
+        .eq("profile_id", userId),
+    ),
+  )
+
+  const stillThere = leftovers
+    .map((r, i) => ({ table: SUPABASE_JOURNEY_TABLES[i], count: r.count ?? 0 }))
+    .filter((r) => r.count > 0)
+
+  if (stillThere.length > 0) {
+    const detail = stillThere.map((r) => `${r.table} (${r.count})`).join(", ")
+    return {
+      error: `these didn't erase: ${detail}. the database is refusing the delete — this needs a delete policy for your own rows.`,
+      counts,
+    }
   }
 
   // --- Neon side -----------------------------------------------------------
