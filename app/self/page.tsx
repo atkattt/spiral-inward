@@ -1,9 +1,7 @@
 import { cookies } from "next/headers"
 import { redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
-import { getRevealRadius } from "@/app/actions/progress"
 import { SelfSpaceView } from "@/components/self/self-space-view"
-import { BASE_REVEAL_RADIUS } from "@/lib/self/unlock"
 import { loadSelfReads } from "@/lib/self/reads-data"
 
 export const metadata = {
@@ -22,14 +20,11 @@ export default async function SelfPage() {
     if (cookieStore.get("spiral_guest")?.value !== "1") redirect("/sign-in")
     // Guests can see the shape of the page, but there's no chart to read and
     // the conversation stays locked.
-    return <SelfSpaceView revealRadius={BASE_REVEAL_RADIUS} reads={null} />
+    return <SelfSpaceView reads={null} />
   }
 
-  const [revealRadius, reads] = await Promise.all([
-    getRevealRadius(),
-    loadSelfReads(supabase, user.id),
-  ])
-  return (
-    <SelfSpaceView revealRadius={revealRadius} reads={reads} userId={user.id} />
-  )
+  // The chat gate is derived from the reads themselves now (both vedic phases
+  // cleared), so the reveal radius is no longer fetched here.
+  const reads = await loadSelfReads(supabase, user.id)
+  return <SelfSpaceView reads={reads} userId={user.id} />
 }

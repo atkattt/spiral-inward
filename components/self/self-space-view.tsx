@@ -9,7 +9,11 @@ import { Starfield } from "@/components/starfield"
 import { SelfChat } from "@/components/self/self-chat"
 import { SelfReads } from "@/components/self/self-reads"
 import { SelfView } from "@/components/spiral/self-view"
-import { CHAT_UNLOCK_RADIUS, unlockProgress } from "@/lib/self/unlock"
+import {
+  chatUnlockedFrom,
+  lensLabel,
+  type LensClearState,
+} from "@/lib/self/unlock"
 import { sectionClearProgress } from "@/lib/self/lenses"
 import { lensRankFromRecord } from "@/lib/spiral/sections"
 import type { AvatarSignals } from "@/lib/self/avatar-slots"
@@ -19,17 +23,13 @@ const MONO =
   "'Geist Pixel', ui-monospace, monospace"
 
 export function SelfSpaceView({
-  revealRadius,
   reads,
   userId,
 }: {
-  revealRadius: number
   reads: SelfReadsData | null
   /** stable per-user seed so the creature regrows the exact same being */
   userId?: string
 }) {
-  const progress = unlockProgress(revealRadius)
-  const unlocked = revealRadius >= CHAT_UNLOCK_RADIUS
 
   // THE SAME BEING AS /circle: structure from the shared section-clear rule
   // over the same matched fragments + read_responses, disposition from the
@@ -44,6 +44,20 @@ export function SelfSpaceView({
   const [answeredIds, setAnsweredIds] = useState<Set<string>>(
     () => new Set(reads ? Object.keys(reads.answers) : []),
   )
+  // The chat gate: both vedic phases finished, by the same section-clear rule
+  // the spiral and the creature already use. Answers saved this session are
+  // judgements-in-progress, not clears, so this intentionally keys off
+  // `respondedIds` (agree/disagree) exactly like the lens progression does.
+  const { states: lensStates, unlocked } = useMemo(
+    () =>
+      chatUnlockedFrom(
+        reads?.matched ?? [],
+        respondedIds,
+        reads?.lensRanks,
+      ),
+    [reads, respondedIds],
+  )
+
   const creatureSignals = useMemo<AvatarSignals>(() => {
     let agrees = 0
     let disagrees = 0
@@ -130,7 +144,7 @@ export function SelfSpaceView({
         {/* 2 — Talk to your self (gated) */}
         <section className="flex flex-col gap-3">
           <SectionLabel centered>talk to your self</SectionLabel>
-          {unlocked ? <SelfChat /> : <LockedChat progress={progress} />}
+          {unlocked ? <SelfChat /> : <LockedChat states={lensStates} />}
         </section>
 
         {/* 3 — What you know: write things down in your own words, keep them,
@@ -245,9 +259,8 @@ function SectionLabel({
   )
 }
 
-/** Locked state: explains the conversation opens as more reads are unlocked. */
-function LockedChat({ progress }: { progress: number }) {
-  const pct = Math.round(progress * 100)
+/** Locked state: the conversation opens once both vedic phases are finished. */
+function LockedChat({ states }: { states: LensClearState[] }) {
   return (
     <div
       className="flex flex-col items-center gap-4 rounded-2xl px-6 py-9 text-center"
@@ -269,37 +282,32 @@ function LockedChat({ progress }: { progress: number }) {
           maxWidth: 260,
         }}
       >
-        this chat unlocks once we know you a little better. add more entries
-        and open a few reads to get there.
+        this opens when you&apos;ve finished both vedic lenses. keep going.
       </p>
 
-      {/* Progress toward unlock */}
-      <div className="mt-1 flex w-full max-w-[220px] flex-col gap-2">
-        <div
-          className="h-px w-full overflow-hidden"
-          style={{ background: "#1c1c1c" }}
-        >
-          <div
-            className="h-full"
+      {/* Where each phase stands — one quiet line per lens, no bar. */}
+      <div className="mt-1 flex flex-col items-center gap-1.5">
+        {states.map((s) => (
+          <span
+            key={s.slug}
             style={{
-              width: `${Math.max(4, pct)}%`,
-              background: "#f5f5f5",
-              boxShadow: "0 0 8px rgba(255,255,255,0.5)",
-              transition: "width .5s ease-out",
+              fontSize: 11,
+              letterSpacing: 0.6,
+              color: s.complete ? "#8a8a8a" : "#4a4a4a",
+              fontFamily: MONO,
             }}
-          />
-        </div>
-        <span
-          style={{
-            fontSize: 9,
-            letterSpacing: 2,
-            textTransform: "uppercase",
-            color: "#4a4a4a",
-            fontFamily: MONO,
-          }}
-        >
-          {pct}% unlocked
-        </span>
+          >
+            {lensLabel(s.slug)}
+            {" — "}
+            {/* A phase with nothing matched yet reads as "locked" rather than
+                "0 of 0", which would look like a bug. */}
+            {s.empty
+              ? "locked"
+              : s.complete
+                ? "cleared"
+                : `${s.done} of ${s.total} cleared`}
+          </span>
+        ))}
       </div>
     </div>
   )

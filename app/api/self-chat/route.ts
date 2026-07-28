@@ -6,8 +6,7 @@ import {
   type UIMessage,
 } from "ai"
 import { createClient } from "@/lib/supabase/server"
-import { getRevealRadius } from "@/app/actions/progress"
-import { CHAT_UNLOCK_RADIUS } from "@/lib/self/unlock"
+import { chatUnlockedFrom } from "@/lib/self/unlock"
 import { describeChartFacts, loadSelfReads } from "@/lib/self/reads-data"
 import {
   listTruthsForGrounding,
@@ -32,19 +31,25 @@ export async function POST(req: Request) {
     return new Response("Unauthorized", { status: 401 })
   }
 
-  // Enforce the same unlock gate the UI shows, server-side.
-  const revealRadius = await getRevealRadius()
-  if (revealRadius < CHAT_UNLOCK_RADIUS) {
-    return new Response("This conversation is still locked.", { status: 403 })
-  }
-
   const { messages }: { messages: UIMessage[] } = await req.json()
 
   // Everything the voice is allowed to know: chart facts + authored fragments
   // (marked by the user's own agree/disagree) + their written answers + the
   // what-you-know entries in their own words (sent ones elevated).
-  const [{ chart, matched, answers, responses }, grounding] =
+  const [{ chart, matched, answers, responses, lensRanks }, grounding] =
     await Promise.all([loadSelfReads(supabase, user.id), listTruthsForGrounding()])
+
+  // Enforce the same unlock gate the UI shows, server-side: both vedic phases
+  // finished. Loaded first because the gate is now derived from the same reads
+  // data the prompt is built from, rather than a stored radius.
+  const { unlocked } = chatUnlockedFrom(
+    matched,
+    new Set(Object.keys(responses)),
+    lensRanks,
+  )
+  if (!unlocked) {
+    return new Response("This conversation is still locked.", { status: 403 })
+  }
   const { sentNew, sent, kept } = grounding
 
   // A session opener: only on the FIRST message of a conversation, and only
