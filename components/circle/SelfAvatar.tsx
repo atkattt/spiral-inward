@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import { useReducedMotion } from "@/lib/use-reduced-motion";
 
 /**
  * SelfAvatar
@@ -86,10 +87,9 @@ export default function SelfAvatar({
   const colorRef = useRef<string | null>(color);
   const reactT = useRef<number>(0);
 
-  const reduceMotion =
-    typeof window !== "undefined" &&
-    window.matchMedia &&
-    window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  // Hydration-safe: SSR always sees `false`, then the real value lands after
+  // mount. Only consumed inside the rAF effect below, never in SSR'd markup.
+  const reduceMotion = useReducedMotion();
 
   // when mood prop changes, trigger it (transient moods get a decay timer).
   // ~84 frames ≈ 1.4s so the agree/disagree expression is clearly readable

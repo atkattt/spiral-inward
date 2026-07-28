@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useRef } from "react"
+import { useReducedMotion } from "@/lib/use-reduced-motion"
 
 /**
  * AsciiSpiral
@@ -39,10 +40,9 @@ export default function AsciiSpiral({
   const ref = useRef<HTMLPreElement | null>(null)
   const rafRef = useRef<number | null>(null)
 
-  const reduceMotion =
-    typeof window !== "undefined" &&
-    window.matchMedia &&
-    window.matchMedia("(prefers-reduced-motion: reduce)").matches
+  // Hydration-safe; see lib/use-reduced-motion.ts. Only read inside the rAF
+  // effect below, which renders a single static frame when motion is reduced.
+  const reduceMotion = useReducedMotion()
 
   useEffect(() => {
     const el = ref.current

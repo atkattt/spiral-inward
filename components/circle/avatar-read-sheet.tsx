@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react"
 import SelfAvatar, { type Mood } from "@/components/circle/SelfAvatar"
 import { chartRead } from "@/lib/spiral/chart-read"
+import { useReducedMotion } from "@/lib/use-reduced-motion"
 
 const MONO =
   "'Geist Pixel', ui-monospace, monospace"
@@ -33,10 +34,9 @@ export function AvatarReadSheet({
   // Type the summary out (terminal voice) each time the sheet opens.
   const summaryText = chartRead.summary.text
   const [typed, setTyped] = useState(0)
-  const reduceMotion =
-    typeof window !== "undefined" &&
-    window.matchMedia &&
-    window.matchMedia("(prefers-reduced-motion: reduce)").matches
+  // Hydration-safe; see lib/use-reduced-motion.ts. Only read inside the
+  // typewriter effect below, so the SSR'd markup never branches on it.
+  const reduceMotion = useReducedMotion()
 
   useEffect(() => {
     if (!open) {
