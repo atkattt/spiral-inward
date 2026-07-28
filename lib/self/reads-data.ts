@@ -8,6 +8,8 @@ import {
   loadActiveLenses,
   type LensState,
 } from "@/lib/self/lenses"
+// unlock.ts only imports a TYPE from this module, so this is not a runtime cycle.
+import { vedicJourneyProgress } from "@/lib/self/unlock"
 
 // A fragment row as stored in Supabase (superset of the matcher's Fragment).
 export type FragmentRow = Fragment & {
@@ -89,6 +91,11 @@ export type SelfReadsData = {
       cross the server→client props boundary; empty when lenses are
       unavailable, which collapses the tiebreak to weight + id. */
   lensRanks: Record<string, number>
+  /** Constellations cleared across BOTH vedic phases, for the locked chat's
+      percentage. Computed here from `matchedAll` because `matched` is gated to
+      unlocked lenses — the client cannot see vedic_deep's total until it opens,
+      which would make the bar read 100% while the chat was still locked. */
+  vedicJourney: { done: number; total: number }
 }
 
 // Normalize self_questions (jsonb array, JSON string, or plain string) to a
@@ -226,7 +233,16 @@ export async function loadSelfReads(
   const lensRanks: Record<string, number> = {}
   for (const l of lenses) lensRanks[l.slug] = Number(l.sort_order) || 0
 
-  return { chart, matched, answers, responses, lens, lensRanks }
+  // Overall vedic-journey progress for the locked chat's percentage. Uses
+  // matchedAll (every lens) so vedic_deep's constellations are counted while it
+  // is still locked; see vedicJourneyProgress for why that matters.
+  const vedicJourney = vedicJourneyProgress(
+    matchedAll,
+    new Set(Object.keys(responses)),
+    lensRanks,
+  )
+
+  return { chart, matched, answers, responses, lens, lensRanks, vedicJourney }
 }
 
 /**

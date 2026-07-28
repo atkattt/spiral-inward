@@ -9,11 +9,7 @@ import { Starfield } from "@/components/starfield"
 import { SelfChat } from "@/components/self/self-chat"
 import { SelfReads } from "@/components/self/self-reads"
 import { SelfView } from "@/components/spiral/self-view"
-import {
-  chatUnlockedFrom,
-  lensLabel,
-  type LensClearState,
-} from "@/lib/self/unlock"
+import { chatUnlockedFrom, journeyPercent } from "@/lib/self/unlock"
 import { sectionClearProgress } from "@/lib/self/lenses"
 import { lensRankFromRecord } from "@/lib/spiral/sections"
 import type { AvatarSignals } from "@/lib/self/avatar-slots"
@@ -48,14 +44,18 @@ export function SelfSpaceView({
   // the spiral and the creature already use. Answers saved this session are
   // judgements-in-progress, not clears, so this intentionally keys off
   // `respondedIds` (agree/disagree) exactly like the lens progression does.
-  const { states: lensStates, unlocked } = useMemo(
-    () =>
-      chatUnlockedFrom(
-        reads?.matched ?? [],
-        respondedIds,
-        reads?.lensRanks,
-      ),
+  const { unlocked } = useMemo(
+    () => chatUnlockedFrom(reads?.matched ?? [], respondedIds, reads?.lensRanks),
     [reads, respondedIds],
+  )
+
+  // Overall journey percentage. The total comes from the server, which is the
+  // only side that can see vedic_deep's constellations while that lens is still
+  // locked. `unlocked` is passed so the bar can never show 100% on a locked
+  // panel — see journeyPercent.
+  const percent = journeyPercent(
+    reads?.vedicJourney ?? { done: 0, total: 0 },
+    unlocked,
   )
 
   const creatureSignals = useMemo<AvatarSignals>(() => {
@@ -144,7 +144,7 @@ export function SelfSpaceView({
         {/* 2 — Talk to your self (gated) */}
         <section className="flex flex-col gap-3">
           <SectionLabel centered>talk to your self</SectionLabel>
-          {unlocked ? <SelfChat /> : <LockedChat states={lensStates} />}
+          {unlocked ? <SelfChat /> : <LockedChat percent={percent} />}
         </section>
 
         {/* 3 — What you know: write things down in your own words, keep them,
@@ -259,8 +259,11 @@ function SectionLabel({
   )
 }
 
-/** Locked state: the conversation opens once both vedic phases are finished. */
-function LockedChat({ states }: { states: LensClearState[] }) {
+/**
+ * Locked state. The rule is still "both vedic phases cleared"; this shows it as
+ * one overall percentage rather than a per-phase breakdown.
+ */
+function LockedChat({ percent }: { percent: number }) {
   return (
     <div
       className="flex flex-col items-center gap-4 rounded-2xl px-6 py-9 text-center"
@@ -282,35 +285,40 @@ function LockedChat({ states }: { states: LensClearState[] }) {
           maxWidth: 260,
         }}
       >
-        this opens when you&apos;ve finished both vedic lenses. keep going.
+        this opens when you&apos;ve completed enough reads. keep going.
       </p>
 
-      {/* Where each phase stands — one quiet line per lens, no bar. */}
-      <div className="mt-1 flex flex-col items-center gap-1.5">
-        {states.map((s) => (
-          <span
-            key={s.slug}
+      {/* Overall progress across BOTH vedic phases as one number, so it reaches
+          100% exactly when the chat unlocks. */}
+      <div className="mt-1 flex w-full max-w-[220px] flex-col gap-2">
+        <div
+          className="h-px w-full overflow-hidden"
+          style={{ background: "#1c1c1c" }}
+        >
+          <div
+            className="h-full"
             style={{
-              fontSize: 12,
-              letterSpacing: 0.6,
-              // #4a4a4a on this panel was ~2.3:1 — legible on a desktop
-              // monitor, effectively invisible at 12px on a phone. Kept quiet,
-              // but now actually readable.
-              color: s.complete ? "#a8a8a8" : "#7d7d7d",
-              fontFamily: MONO,
+              // A hairline of fill at 0% reads as "this is a bar, and you are at
+              // the start" rather than as an empty container.
+              width: `${Math.max(2, percent)}%`,
+              background: "#f5f5f5",
+              boxShadow: "0 0 8px rgba(255,255,255,0.5)",
+              transition: "width .5s ease-out",
             }}
-          >
-            {lensLabel(s.slug)}
-            {" — "}
-            {/* A phase with nothing matched yet reads as "locked" rather than
-                "0 of 0", which would look like a bug. */}
-            {s.empty
-              ? "locked"
-              : s.complete
-                ? "cleared"
-                : `${s.done} of ${s.total} cleared`}
-          </span>
-        ))}
+          />
+        </div>
+        <span
+          style={{
+            fontSize: 10,
+            letterSpacing: 2,
+            // Lowercase, matching the rest of the panel — no uppercase
+            // transform, so the label reads "42% complete".
+            color: "#7d7d7d",
+            fontFamily: MONO,
+          }}
+        >
+          {percent}% complete
+        </span>
       </div>
     </div>
   )

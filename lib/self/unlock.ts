@@ -83,7 +83,52 @@ export function chatUnlockedFrom(
   return { states, unlocked: chatUnlocked(states) }
 }
 
-/** Display name for a phase in the locked status list. */
-export function lensLabel(slug: string): string {
-  return slug === "vedic_deep" ? "vedic deeper" : "vedic"
+/**
+ * Overall progress through the whole vedic journey — both phases as ONE number,
+ * for the locked panel's percentage.
+ *
+ * Must be given fragments from EVERY lens (the loader's `matchedAll`), not the
+ * unlock-gated `matched` the client sees. `vedic_deep`'s constellations are
+ * invisible until that lens opens, so a percentage computed from gated data
+ * would read 100% the moment `vedic` was cleared — while the chat was still
+ * locked, which is exactly the thing this number is supposed to track.
+ *
+ * Summed PER LENS rather than over one merged pool: section keys repeat across
+ * lenses (both phases have "the surface"), so grouping the two together would
+ * collapse them into one set of constellations and roughly halve the total.
+ */
+export function vedicJourneyProgress(
+  matchedAll: FragmentRow[],
+  respondedIds: ReadonlySet<string>,
+  lensRanks?: Record<string, number>,
+): { done: number; total: number } {
+  const rank = lensRankFromRecord(lensRanks)
+  let done = 0
+  let total = 0
+  for (const slug of CHAT_UNLOCK_LENSES) {
+    const inLens = matchedAll.filter((f) => lensOf(f) === slug)
+    if (inLens.length === 0) continue
+    const p = sectionClearProgress(inLens, respondedIds, rank)
+    done += p.done
+    total += p.total
+  }
+  return { done, total }
+}
+
+/**
+ * The locked panel's percentage, 0–100.
+ *
+ * Clamped to 99 until the gate actually opens so the bar can never sit at 100%
+ * next to a locked panel — the two are computed from different scopes
+ * (all-lens progress vs. the unlock-gated gate), and this makes "100% means
+ * unlocked" true by construction rather than by assuming they agree.
+ */
+export function journeyPercent(
+  progress: { done: number; total: number },
+  unlocked: boolean,
+): number {
+  if (unlocked) return 100
+  if (progress.total <= 0) return 0
+  const pct = Math.floor((progress.done / progress.total) * 100)
+  return Math.max(0, Math.min(99, pct))
 }
