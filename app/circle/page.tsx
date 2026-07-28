@@ -73,7 +73,15 @@ export default async function CirclePage() {
         initialPeople={people}
         initialRelationships={relationships}
       >
-        <BirthChartBootstrap userId={user.id} />
+        {/*
+          `hasChart` tells the bootstrap whether this render is the empty one.
+          With no chart there are no matched reads, so the spiral paints a
+          complete-looking but starless universe while the client persists the
+          onboarding chart and refreshes — which read as "broken", not "loading".
+          The bootstrap uses this to cover that gap, and stays invisible for
+          returning users whose chart is already here.
+        */}
+        <BirthChartBootstrap userId={user.id} hasChart={selfReads.chart !== null} />
         <CircleView
           userName={userName}
           initialRevealRadius={revealRadius}

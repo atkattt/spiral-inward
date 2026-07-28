@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useRef } from "react"
+import { useEffect, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import {
   BIRTH_NORMALIZED_KEY,
@@ -14,6 +14,7 @@ import {
   ensureUserChart,
   persistBirthChart,
 } from "@/app/actions/birth-chart"
+import { SkySettlingOverlay } from "@/components/sky-settling-overlay"
 
 type StoredNormalized = {
   date: string
@@ -42,9 +43,20 @@ type StoredNormalized = {
  *
  * Renders nothing.
  */
-export function BirthChartBootstrap({ userId }: { userId: string }) {
+export function BirthChartBootstrap({
+  userId,
+  hasChart = true,
+}: {
+  userId: string
+  /**
+   * Whether the server render that mounted this already had a chart. Defaults
+   * to true so any other caller keeps the old invisible behaviour.
+   */
+  hasChart?: boolean
+}) {
   const router = useRouter()
   const ran = useRef(false)
+  const [failed, setFailed] = useState<string | null>(null)
 
   useEffect(() => {
     if (ran.current) return
@@ -124,7 +136,11 @@ export function BirthChartBootstrap({ userId }: { userId: string }) {
           // re-render the server props now that the chart is saved.
           router.refresh()
         } else if (res.status !== "unauthenticated") {
-          console.log("[v0] persistBirthChart:", res)
+          // Surface it — otherwise the overlay would spin forever on a render
+          // that has no reads to show.
+          setFailed(
+            res.status === "error" ? res.message : "your chart didn't save",
+          )
         }
         return
       }
@@ -138,12 +154,28 @@ export function BirthChartBootstrap({ userId }: { userId: string }) {
         // birth data, after the empty server render. Refresh to surface it.
         router.refresh()
       } else if (res.status === "error") {
-        console.log("[v0] ensureUserChart:", res.message)
+        setFailed(res.message)
+      } else if (res.status === "ready" && !res.recomputed && !hasChart) {
+        // The server says a chart exists but this render didn't see one, so no
+        // refresh is coming and the overlay would hang. Force one.
+        router.refresh()
       }
     }
 
     void run()
-  }, [router])
+    // `ran` keeps this to a single pass, so the captured `hasChart` is always
+    // the value from the render that mounted us — which is what the branches
+    // above want.
+  }, [router, hasChart])
 
-  return null
+  /**
+   * Nothing to cover once the chart is here: `hasChart` flips to true on the
+   * refreshed server render, which is also the exact moment the reads land — so
+   * the overlay lifts precisely when the spiral is ready, with no timer to
+   * guess at and no flash for returning users (who mount with hasChart already
+   * true and render nothing at all).
+   */
+  if (hasChart) return null
+
+  return <SkySettlingOverlay failed={failed} />
 }

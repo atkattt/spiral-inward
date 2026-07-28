@@ -143,15 +143,25 @@ export async function loadSelfReads(
   // Order is PINNED (weight desc, then id): a section can hold two majors, and
   // an unpinned fetch let the star flip between loads. Downstream still applies
   // the full star rule, but nothing should ever depend on raw row order.
-  const fragments = await withRetry(async () => {
-    const { data, error } = await supabase
-      .from("fragments")
-      .select("*")
-      .order("weight", { ascending: false })
-      .order("id", { ascending: true })
-    if (error) throw new Error(`fragments query failed: ${error.message}`)
-    return (data ?? []) as FragmentRow[]
-  })
+  //
+  // Skipped entirely when there is no chart, because `matchedAll` below is then
+  // hardcoded to [] and every one of these rows is thrown away. That is exactly
+  // the state /circle server-renders in right after a fresh sign-in (the chart
+  // is still sitting in localStorage, waiting for BirthChartBootstrap to
+  // persist it), so the slowest query on the page was being paid for nothing on
+  // the one render where the user is already waiting. Measured: 799 rows /
+  // ~524KB / ~240-430ms of pure waste before the reads could even start.
+  const fragments = chart
+    ? await withRetry(async () => {
+        const { data, error } = await supabase
+          .from("fragments")
+          .select("*")
+          .order("weight", { ascending: false })
+          .order("id", { ascending: true })
+        if (error) throw new Error(`fragments query failed: ${error.message}`)
+        return (data ?? []) as FragmentRow[]
+      })
+    : ([] as FragmentRow[])
 
   // 3) match chart -> fragments (deterministic, sorted by weight desc), then
   // gate by the user's unlocked lenses. matchedAll (every lens) stays local —
