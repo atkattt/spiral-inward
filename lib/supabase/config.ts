@@ -1,18 +1,35 @@
 /**
  * Resolved Supabase connection settings.
  *
- * These are PUBLIC values (the project URL and the anon/publishable key) that
- * are already shipped to the browser via the NEXT_PUBLIC_* env vars, so it is
- * safe to keep them here as fallbacks. This makes the app resilient to the
- * runtime environment losing the variables (e.g. after a revert or restart) —
- * env vars still take precedence when present.
+ * These are PUBLIC values (the project URL and the anon/publishable key) and are
+ * shipped to the browser via the NEXT_PUBLIC_* env vars.
+ *
+ * There are deliberately NO fallback values here. A hardcoded fallback means a
+ * misconfigured environment silently connects to whatever project was baked into
+ * the source, instead of failing — which risks preview/development traffic
+ * reading and writing production data unnoticed. Missing configuration must be
+ * loud and immediate.
+ *
+ * NOTE: `process.env.NEXT_PUBLIC_*` is inlined at build time, so these must be
+ * present in the *build* environment, not just at runtime.
  */
-const FALLBACK_SUPABASE_URL = "https://euqkklpnvegrjecagzye.supabase.co"
-const FALLBACK_SUPABASE_ANON_KEY =
-  "sb_publishable_okLhy4SZpnUot3Z0kt4Vjg_NUcBbanR"
+function required(name: string, value: string | undefined): string {
+  if (!value) {
+    throw new Error(
+      `[spiral-inward] Missing required environment variable: ${name}. ` +
+        `Set it in your Vercel project (Production, Preview, and Development) ` +
+        `and in .env.development.local for local work. See .env.example.`,
+    )
+  }
+  return value
+}
 
-export const SUPABASE_URL =
-  process.env.NEXT_PUBLIC_SUPABASE_URL || FALLBACK_SUPABASE_URL
+export const SUPABASE_URL = required(
+  "NEXT_PUBLIC_SUPABASE_URL",
+  process.env.NEXT_PUBLIC_SUPABASE_URL,
+)
 
-export const SUPABASE_ANON_KEY =
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || FALLBACK_SUPABASE_ANON_KEY
+export const SUPABASE_ANON_KEY = required(
+  "NEXT_PUBLIC_SUPABASE_ANON_KEY",
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+)
