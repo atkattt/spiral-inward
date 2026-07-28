@@ -1,6 +1,8 @@
-# vedic-astrology-app
+# spiral-inward
 
 This is a [Next.js](https://nextjs.org) project bootstrapped with [v0](https://v0.app).
+
+Deployed at [spiral-inward.vercel.app](https://spiral-inward.vercel.app).
 
 ## Built with v0
 
