@@ -1,6 +1,12 @@
-import { getSupabase } from "@/lib/supabase"
+import { redirect } from "next/navigation"
+import { createClient } from "@/lib/supabase/server"
 
 export const dynamic = "force-dynamic"
+
+export const metadata = {
+  title: "Brain · Spiral Inward",
+  description: "Internal fragment inspector.",
+}
 
 type Fragment = {
   id: string | number
@@ -29,23 +35,22 @@ function toQuestions(value: Fragment["self_questions"]): string[] {
 }
 
 export default async function BrainPage() {
-  const { client, error: clientError } = getSupabase()
+  const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
 
-  const result = client
-    ? await client
-        .from("fragments")
-        .select("*")
-        .order("weight", { ascending: false })
-    : { data: null, error: null }
+  // Internal tooling — real accounts only. No guest bypass here (unlike
+  // /self and /circle), since there's nothing for a guest to see.
+  if (!user) redirect("/sign-in")
 
-  // Surface either the missing-env error or the fetch error in one place.
-  const error = clientError
-    ? { message: clientError }
-    : result.error
-      ? { message: result.error.message }
-      : null
+  const { data, error: queryError } = await supabase
+    .from("fragments")
+    .select("*")
+    .order("weight", { ascending: false })
 
-  const fragments = (result.data ?? []) as Fragment[]
+  const error = queryError ? { message: queryError.message } : null
+  const fragments = (data ?? []) as Fragment[]
 
   return (
     <main className="min-h-[100dvh] bg-neutral-950 px-6 py-20 text-neutral-200 lowercase">
