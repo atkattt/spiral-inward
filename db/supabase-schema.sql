@@ -4,6 +4,17 @@
 -- Assembled 2026-07-28. This file is DOCUMENTATION of live state, not a
 -- migration. See db/README.md.
 --
+-- REFRESHED 2026-07-28 (later the same day). The moon_nakshatra import landed
+-- while this file was first being assembled, which left it internally
+-- inconsistent: the row count said 709 (measured on the first probe) while the
+-- trigger_type and section lists already reflected the post-import state. Every
+-- count below has now been re-probed against the live table at 799 rows, so the
+-- counts and the value lists finally describe the same snapshot.
+--
+-- Also changed since: section = 'moon' is gone (those 135 moon_nakshatra rows
+-- were corrected to 'the heart'), so the section vocabulary is 11 values, all
+-- of them valid SectionKeys in lib/spiral/sections.ts.
+--
 -- HOW THIS WAS PRODUCED, AND WHY IT IS PART DUMP / PART RECONSTRUCTION
 -- -------------------------------------------------------------------
 -- There is no direct Postgres connection to Supabase in this environment and
@@ -32,9 +43,9 @@
 --                                 present. Control probes on deliberately
 --                                 bogus column pairs correctly returned 42P10,
 --                                 confirming the test discriminates.
---   * Some nullability         -- a column that is NULL in all 709 readable
+--   * Some nullability         -- a column that is NULL in all 799 readable
 --                                 fragments rows cannot be NOT NULL.
---   * Column lists in full     -- fragments (709 rows) and lenses (3 rows) are
+--   * Column lists in full     -- fragments (799 rows) and lenses (3 rows) are
 --                                 anon-readable, so their columns came back
 --                                 directly from real rows.
 --
@@ -156,29 +167,29 @@ CREATE POLICY "lenses_readable_by_all" ON public.lenses
 
 
 -- ---------------------------------------------------------------------------
--- fragments  --  the authored interpretation library. ANON-READABLE (709 rows).
+-- fragments  --  the authored interpretation library. ANON-READABLE (799 rows).
 -- ---------------------------------------------------------------------------
 -- Column list came back from real rows: complete and exact. All types below
 -- are [D]. This is the one table where nullability is partly [P], because a
--- column that is NULL across all 709 rows cannot be NOT NULL.
+-- column that is NULL across all 799 rows cannot be NOT NULL.
 
 CREATE TABLE public.fragments (
     id             uuid                     NOT NULL,  -- [D] uuid  [P] unique index exists  [R] PK, DEFAULT gen_random_uuid()
-    trigger_type   text                     NOT NULL,  -- [D] text  [R] NOT NULL (non-null in all 709 rows, not proof)
-    condition      jsonb,                              -- [D] jsonb (order-by test)  [R] nullability
-    concept_id     uuid,                               -- [D] uuid  [P] NULLABLE (null in all 709 rows)  [P] FK -> jungian_concepts
-    archetype      text,                               -- [D] text  [R] nullability
-    title          text,                               -- [D] text  [R] nullability
-    body           text,                               -- [D] text  [R] nullability
+    trigger_type   text                     NOT NULL,  -- [D] text  [R] NOT NULL (non-null in all 799 rows, not proof)
+    condition      jsonb,                              -- [D] jsonb (order-by test)  [R] NOT NULL (non-null in all 799 rows, not proof)
+    concept_id     uuid,                               -- [D] uuid  [P] NULLABLE (null in all 799 rows)  [P] FK -> jungian_concepts
+    archetype      text,                               -- [D] text  [P] NULLABLE (null in 663 of 799 rows)
+    title          text,                               -- [D] text  [R] NOT NULL (non-null in all 799 rows, not proof)
+    body           text,                               -- [D] text  [R] NOT NULL (non-null in all 799 rows, not proof)
     self_questions text[],                             -- [D] ARRAY of text ("malformed array literal" + real rows are string arrays)
-    weight         integer,                            -- [D] integer  [R] nullability. Live values: 4, 7, 8, 9.
-    life_domain    text,                               -- [D] text  [R] nullability
-    tone           text,                               -- [D] text  [R] nullability
+    weight         integer,                            -- [D] integer  [R] NOT NULL (non-null in all 799 rows). Live values: 4, 7, 8, 9.
+    life_domain    text,                               -- [D] text  [R] NOT NULL (non-null in all 799 rows, not proof)
+    tone           text,                               -- [D] text  [R] NOT NULL (non-null in all 799 rows, not proof)
     created_at     timestamp with time zone,           -- [D] timestamptz  [R] NOT NULL, DEFAULT now()
     updated_at     timestamp with time zone,           -- [D] timestamptz  [R] NOT NULL, DEFAULT now()
-    symbol         text,                               -- [D] text  [P] NULLABLE (null in 664 of 709 rows)
-    section        text,                               -- [D] text  [R] nullability
-    lens           text,                               -- [D] text  [R] nullability, DEFAULT 'vedic'
+    symbol         text,                               -- [D] text  [P] NULLABLE (null in 664 of 799 rows)
+    section        text,                               -- [D] text  [R] NOT NULL (non-null in all 799 rows, not proof)
+    lens           text,                               -- [D] text  [R] NOT NULL (non-null in all 799 rows), DEFAULT 'vedic'
     CONSTRAINT fragments_pkey PRIMARY KEY (id),        -- [P] unique index  [R] PK designation
     CONSTRAINT fragments_concept_id_fkey FOREIGN KEY (concept_id)
         REFERENCES public.jungian_concepts(id)          -- [P] FK confirmed by embed  [R] ON DELETE behaviour
@@ -186,38 +197,56 @@ CREATE TABLE public.fragments (
 
 -- [R] RECONSTRUCTED -- THE ALLOWED-VALUE LIST IS A LOWER BOUND, NOT THE
 -- CONSTRAINT. The named constraint could not be read. What IS dumped: the six
--- DISTINCT trigger_type values actually present across all 709 rows. The real
+-- DISTINCT trigger_type values actually present across all 799 rows. The real
 -- constraint may permit additional values that currently have zero rows, and
 -- may not even be an IN list. VERIFY THIS ONE IN THE DASHBOARD FIRST -- it is
 -- the statement in this file most likely to be wrong.
+--
+-- OPERATIONALLY IMPORTANT: lib/matcher.ts already implements three further
+-- trigger types that have ZERO rows today, so they cannot appear in the list
+-- below (it is dumped from data, not from the constraint):
+--     planet_in_nakshatra   condition { planet, nakshatra }
+--     mahadasha             condition { planet }
+--     antardasha            condition { maha, antar }
+-- If the live constraint really is a closed IN list matching the six values
+-- below, importing any of those three WILL be rejected until the constraint is
+-- widened. Check the real definition before the next deep-content import.
 ALTER TABLE public.fragments
     ADD CONSTRAINT fragments_trigger_type_check CHECK (
         trigger_type IN (
-            'ascendant_sign',           -- [D] present in data
-            'conjunction',              -- [D] present in data
-            'moon_nakshatra',           -- [D] present in data
-            'planet_in_house',          -- [D] present in data
-            'planet_in_sign',           -- [D] present in data
-            'planet_in_sign_and_house'  -- [D] present in data
+            'ascendant_sign',           -- [D] present in data (60 rows)
+            'conjunction',              -- [D] present in data (10 rows)
+            'moon_nakshatra',           -- [D] present in data (135 rows)
+            'planet_in_house',          -- [D] present in data (156 rows)
+            'planet_in_sign',           -- [D] present in data (420 rows)
+            'planet_in_sign_and_house'  -- [D] present in data (18 rows)
         )
     );
 
--- [R] RECONSTRUCTED. Effect observed: anon CAN read all 709 rows; anon INSERT
+-- [R] RECONSTRUCTED. Effect observed: anon CAN read all 799 rows; anon INSERT
 -- is rejected with 42501.
 ALTER TABLE public.fragments ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "fragments_readable_by_all" ON public.fragments
     FOR SELECT USING (true);
 
--- Other distinct live values, dumped from all 709 rows (NOT constraints --
+-- Other distinct live values, dumped from all 799 rows (NOT constraints --
 -- recorded because they document the authored vocabulary):
 --   lens        (2): vedic, vedic_deep
---   section    (12): cluster, growth, mind, moon, the center, the fire,
---                   the heart, the hunger, the private, the surface,
---                   the taste, the weight
+--   section    (11): cluster, growth, mind, the center, the fire, the heart,
+--                   the hunger, the private, the surface, the taste,
+--                   the weight
+--                   -- every one is a valid SectionKey in lib/spiral/sections.ts.
+--                   The earlier invalid value 'moon' is gone: those 135
+--                   moon_nakshatra rows now read 'the heart'. Anything not in
+--                   SECTION_ORDER silently falls back to deriveSection().
 --   tone        (8): confronting, direct, gentle, hopeful, neutral, tender,
 --                   warm, wry
 --   life_domain (7): crisis, emotion, identity, lineage, relationships,
 --                   spirit, work
+--
+-- section distribution at 799 rows: the heart 236, mind 65, the hunger 65,
+--   growth 64, the private 64, the surface 60, the fire 60, the weight 60,
+--   the center 60, the taste 60, cluster 5
 
 
 -- ---------------------------------------------------------------------------
@@ -497,7 +526,7 @@ CREATE TRIGGER on_auth_user_created
 -- ===========================================================================
 -- Row counts visible to the anon role at dump time (post-RLS, so a 0 means
 -- "not readable by anon" OR "empty" -- the two are indistinguishable):
---   fragments           709   (readable)
+--   fragments           799   (readable)
 --   lenses                3   (readable)
 --   profiles              0     charts               0
 --   self_entries          0     read_responses       0

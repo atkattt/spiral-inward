@@ -54,9 +54,15 @@ export function sectionOf(raw: string | null | undefined): SectionKey | null {
 // may not exist yet, or a row wasn't backfilled). Reads the trigger type +
 // condition and maps to a section by priority, so authored fragments spread
 // across the journey instead of collapsing into one section:
-//   ascendant_sign → the surface | moon → the heart | mercury/venus → mind |
-//   jupiter → growth | conjunctions → cluster | rahu/ketu → the hunger |
+//   ascendant_sign → the surface | moon_nakshatra → the heart |
+//   moon → the heart | mercury/venus → mind | jupiter → growth |
+//   conjunctions → cluster | rahu/ketu → the hunger |
 //   saturn in the 12th → the private
+//
+// Trigger types whose condition has no `planet` key need an explicit rule here,
+// otherwise they reach the final "the surface" fallback and quietly land an
+// extra major in a section they do not belong to. moon_nakshatra ({ nakshatra })
+// and antardasha ({ maha, antar }) are both such cases and are handled below.
 // ---------------------------------------------------------------------------
 function planetsIn(condition: unknown): string[] {
   if (!condition || typeof condition !== "object") return []
@@ -66,6 +72,13 @@ function planetsIn(condition: unknown): string[] {
   if (Array.isArray(c.planets)) {
     for (const p of c.planets) if (typeof p === "string") out.push(p.toLowerCase())
   }
+  // antardasha conditions are shaped { maha, antar } with no `planet` key, so
+  // without these two they would carry no planet at all and collapse into the
+  // final "the surface" fallback. The sub-period (antar) is the more specific
+  // flavour, so it is listed first — though note the cascade below picks by its
+  // own fixed priority, not by this order.
+  if (typeof c.antar === "string") out.push(c.antar.toLowerCase())
+  if (typeof c.maha === "string") out.push(c.maha.toLowerCase())
   return out
 }
 
@@ -82,7 +95,14 @@ export function deriveSection(
   const trigger = (triggerType ?? "").trim().toLowerCase()
   if (trigger === "ascendant_sign") return "the surface"
   if (trigger === "conjunction") return "cluster"
+  // moon_nakshatra conditions are shaped { nakshatra } with no `planet` key, so
+  // the planet cascade below cannot see that they are about the Moon. Without
+  // this rule all 135 of them fall through to "the surface" and land a second
+  // major in a section they do not belong to.
+  if (trigger === "moon_nakshatra") return "the heart"
 
+  // planet_in_nakshatra and mahadasha both carry a `planet` key, so they route
+  // correctly through the cascade below and need no rule of their own.
   const planets = planetsIn(condition)
   if (planets.includes("saturn") && houseIn(condition) === 12) return "the private"
   if (planets.includes("rahu") || planets.includes("ketu")) return "the hunger"
