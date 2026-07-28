@@ -163,6 +163,29 @@ function px2(n: number): number {
 }
 
 /**
+ * Same hydration hazard as px2, but for `opacity` — which needs a DIFFERENT
+ * rounding rule. The CSSOM keeps 6 SIGNIFICANT DIGITS for opacity, not 6
+ * decimal places (measured: 0.5958080226108576 -> "0.595808", and
+ * 0.00023397704199347886 -> "0.000233977"). So the server's full-precision
+ * float never matches what the client reads back, and React reports
+ * "some attributes ... didn't match" on the nebula spans.
+ *
+ * px2 can't be reused here: the faintest embers sit near 0.0002, and rounding
+ * those to 2 decimals would snap a large part of the fog to 0 and visibly
+ * flatten the starfield's depth gradient. toPrecision(6) round-trips exactly
+ * while preserving that gradient.
+ *
+ * Values under 1e-6 are clamped to 0 because JS stringifies smaller numbers in
+ * exponential notation ("1e-7"), which is not valid CSS — the browser would
+ * drop the declaration and reintroduce a mismatch. Such glyphs are invisible.
+ */
+function op6(n: number): number {
+  if (!Number.isFinite(n) || n <= 1e-6) return 0
+  if (n >= 1) return 1
+  return Number(n.toPrecision(6))
+}
+
+/**
  * Convert a CSS text-shadow list into the equivalent drop-shadow filter so an
  * SVG glyph can carry the exact same glow a text glyph had.
  */
@@ -1527,7 +1550,7 @@ export function SpiralUniverse({
                   background:
                     "radial-gradient(closest-side, rgba(189,214,238,0.11), rgba(189,214,238,0.035) 55%, transparent)",
                   transform: "translate(-50%, -50%)",
-                  opacity: lit ? Math.min(1, g.max * 2.4) * ext : 0,
+                  opacity: op6(lit ? Math.min(1, g.max * 2.4) * ext : 0),
                   transition: "opacity 1.2s ease",
                   transitionDelay: `${Math.max(spread, crawlDelay(g.t))}s`,
                 }}
@@ -1588,9 +1611,11 @@ export function SpiralUniverse({
                       // Lit glyphs run at ~2x their scattered base brightness;
                       // beyond the drawn extent (ext → 0) the fog thins to
                       // sparse embers implying more.
-                      opacity: lit
-                        ? Math.min(1, g.max * 2) * ext
-                        : Math.min(0.22, g.max * 0.6) * ext,
+                      opacity: op6(
+                        lit
+                          ? Math.min(1, g.max * 2) * ext
+                          : Math.min(0.22, g.max * 0.6) * ext,
+                      ),
                       transition: "color 1.2s ease, opacity 1.2s ease",
                       transitionDelay: `${Math.max(spread, crawlDelay(g.t))}s`,
                     }}
