@@ -137,4 +137,96 @@ export type JourneyFragment = {
   section?: string | null
   trigger_type: string | null
   condition: unknown
+  /** which lens the read belongs to; absent/blank rows are treated as vedic */
+  lens?: unknown
+}
+
+// ---------------------------------------------------------------------------
+// THE STAR RULE — which read becomes a section's star when several qualify.
+//
+// A section can hold MORE THAN ONE major (weight >= MAJOR_WEIGHT): the base
+// lens authors one, and a deeper lens can later add another to the same
+// constellation. Ordering by weight alone leaves those tied, and every fetch
+// site used to leave row order unpinned, so the star could flip between loads.
+//
+// The rule, in strict order:
+//   1. weight descending      — the heaviest read leads
+//   2. lens depth descending  — deeper lens wins (lenses.sort_order, higher
+//                               is deeper). A deep major only ever appears
+//                               after the base star is already answered, so it
+//                               is that constellation's NEXT chapter and takes
+//                               the star position; the base major stays in the
+//                               section as an already-answered bright member.
+//   3. id ascending           — final deterministic tiebreak, so the result
+//                               never depends on row order from the database
+//
+// Because rule 1 sorts weight descending, the star is simply the first element
+// of the ordered list: the heaviest read, which still stands in when nothing in
+// the section reaches MAJOR_WEIGHT (unchanged from the previous behavior).
+// ---------------------------------------------------------------------------
+
+/** lens slug → depth. Higher is deeper. Built from the lenses table. */
+export type LensRank = ReadonlyMap<string, number>
+
+/** Normalize a lens value the same way lib/self/lenses.ts lensOf() does.
+    Kept local so this module stays dependency-free (lenses.ts imports it). */
+function lensSlugOf(lens: unknown): string {
+  return typeof lens === "string" && lens.trim()
+    ? lens.trim().toLowerCase()
+    : "vedic"
+}
+
+/** Depth of a fragment's lens; unknown lenses sort shallowest. */
+export function lensDepthOf(lens: unknown, rank?: LensRank): number {
+  return rank?.get(lensSlugOf(lens)) ?? 0
+}
+
+/** Build a LensRank from the lenses table (sort_order; higher = deeper). */
+export function lensRankFrom(
+  lenses: readonly { slug: string; sort_order: number }[],
+): LensRank {
+  const m = new Map<string, number>()
+  for (const l of lenses) {
+    m.set(lensSlugOf(l.slug), Number(l.sort_order) || 0)
+  }
+  return m
+}
+
+/** Rebuild a LensRank from a plain object (crosses the server→client boundary
+    as props, where a Map cannot be serialized). */
+export function lensRankFromRecord(
+  rank: Record<string, number> | null | undefined,
+): LensRank {
+  return new Map(Object.entries(rank ?? {}))
+}
+
+/** The star comparator: weight desc, then lens depth desc, then id asc. */
+export function compareStarCandidates(
+  a: JourneyFragment,
+  b: JourneyFragment,
+  rank?: LensRank,
+): number {
+  const wa = a.weight ?? 0
+  const wb = b.weight ?? 0
+  if (wa !== wb) return wb - wa
+  const da = lensDepthOf(a.lens, rank)
+  const db = lensDepthOf(b.lens, rank)
+  if (da !== db) return db - da
+  return String(a.id).localeCompare(String(b.id))
+}
+
+/** A section's reads in walk order — the star first, then its minis. */
+export function orderSection<T extends JourneyFragment>(
+  frags: readonly T[],
+  rank?: LensRank,
+): T[] {
+  return [...frags].sort((a, b) => compareStarCandidates(a, b, rank))
+}
+
+/** A section's star, or null for an empty section. */
+export function pickStar<T extends JourneyFragment>(
+  frags: readonly T[],
+  rank?: LensRank,
+): T | null {
+  return orderSection(frags, rank)[0] ?? null
 }

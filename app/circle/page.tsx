@@ -24,6 +24,7 @@ function toUniverseFragment(row: {
   trigger_type?: unknown
   condition?: unknown
   weight?: unknown
+  lens?: unknown
 }): UniverseFragment {
   return {
     id: String(row.id),
@@ -36,6 +37,7 @@ function toUniverseFragment(row: {
     trigger_type: typeof row.trigger_type === "string" ? row.trigger_type : null,
     condition: row.condition ?? null,
     weight: typeof row.weight === "number" ? row.weight : null,
+    lens: typeof row.lens === "string" ? row.lens : null,
   }
 }
 
@@ -79,6 +81,7 @@ export default async function CirclePage() {
           userId={user.id}
           matchedReads={matchedReads}
           initialResponses={selfReads.responses}
+          lensRanks={selfReads.lensRanks}
         />
       </CircleDataProvider>
     )
@@ -113,6 +116,8 @@ export default async function CirclePage() {
         .from("fragments")
         .select("*")
         .eq("lens", firstLensSlug)
+        .order("weight", { ascending: false })
+        .order("id", { ascending: true })
       if (error) throw new Error(`fragments query failed: ${error.message}`)
       return data ?? []
     })

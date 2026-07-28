@@ -2,8 +2,11 @@ import type { SupabaseClient } from "@supabase/supabase-js"
 import { matchFragments, type Chart } from "@/lib/matcher"
 import {
   MAJOR_WEIGHT,
+  lensRankFrom,
+  orderSection,
   sectionFor,
   type JourneyFragment,
+  type LensRank,
 } from "@/lib/spiral/sections"
 import type { FragmentRow } from "@/lib/self/reads-data"
 
@@ -46,7 +49,7 @@ export const VEDIC_DEEP_SLUG = "vedic_deep"
 /**
  * Section-clear progress across a set of matched fragments, using the
  * EXISTING clear rule (mirrors the spiral's section grouping in
- * lib/spiral/sections.ts — sectionFor + the weight>=7 major):
+ * lib/spiral/sections.ts — sectionFor + orderSection's star rule):
  *   - a section with a major: its major answered + 2 of its minors
  *     (or every minor it has, when it has fewer than 2)
  *   - a section with no matched major: 2 minors answered
@@ -55,6 +58,7 @@ export const VEDIC_DEEP_SLUG = "vedic_deep"
 export function sectionClearProgress(
   matched: JourneyFragment[],
   respondedIds: ReadonlySet<string>,
+  rank?: LensRank,
 ): { done: number; total: number } {
   const groups = new Map<string, JourneyFragment[]>()
   for (const f of matched) {
@@ -66,10 +70,13 @@ export function sectionClearProgress(
 
   let done = 0
   for (const frags of groups.values()) {
-    const sorted = [...frags].sort((a, b) => (b.weight ?? 0) - (a.weight ?? 0))
-    const majorIdx = sorted.findIndex((f) => (f.weight ?? 0) >= MAJOR_WEIGHT)
-    const major = majorIdx === -1 ? null : sorted[majorIdx]
-    const minors = major ? sorted.filter((f) => f !== major) : sorted
+    // Same star rule the spiral walks with (weight desc, lens depth desc, id),
+    // so the read the UI shows as a section's star is the exact read this
+    // progress math requires an answer to.
+    const ordered = orderSection(frags, rank)
+    const star = ordered[0]
+    const major = star && (star.weight ?? 0) >= MAJOR_WEIGHT ? star : null
+    const minors = major ? ordered.filter((f) => f !== major) : ordered
 
     const majorOk = major ? respondedIds.has(String(major.id)) : true
     const answeredMinors = minors.filter((f) =>
@@ -174,7 +181,14 @@ export function computeLensState(
     const respondedIds = new Set(
       inLens.filter((f) => responses[String(f.id)]).map((f) => String(f.id)),
     )
-    clearedProgress = sectionClearProgress(inLens, respondedIds)
+    // inLens is a single lens, so the depth tiebreak cannot change anything
+    // here — passed anyway so the gate keeps matching the spiral's star rule
+    // if this ever widens beyond one lens.
+    clearedProgress = sectionClearProgress(
+      inLens,
+      respondedIds,
+      lensRankFrom(lenses),
+    )
   }
 
   return {
@@ -216,6 +230,8 @@ export async function maybeUnlockNextLens(
       .from("fragments")
       .select("*")
       .eq("lens", current.slug)
+      .order("weight", { ascending: false })
+      .order("id", { ascending: true })
     if (fragErr) return
     const matched = matchFragments(
       chartRow as Chart,
@@ -240,7 +256,13 @@ export async function maybeUnlockNextLens(
     // lenses keep the threshold rule.
     let shouldUnlock: boolean
     if (next.slug === VEDIC_DEEP_SLUG) {
-      const { done, total } = sectionClearProgress(matched, respondedIds)
+      // Also single-lens (queried with .eq("lens", current.slug)), so the
+      // depth tiebreak is a no-op; the id tiebreak makes it deterministic.
+      const { done, total } = sectionClearProgress(
+        matched,
+        respondedIds,
+        lensRankFrom(lenses),
+      )
       shouldUnlock = total > 0 && done >= total
     } else {
       shouldUnlock =

@@ -84,6 +84,11 @@ export type SelfReadsData = {
   responses: Record<string, ReadResponse>
   // lens progression (null when the lenses tables are unavailable)
   lens: LensState | null
+  /** lens slug → depth (lenses.sort_order, higher = deeper). Feeds the star
+      rule's depth tiebreak in lib/spiral/sections.ts. A plain object so it can
+      cross the server→client props boundary; empty when lenses are
+      unavailable, which collapses the tiebreak to weight + id. */
+  lensRanks: Record<string, number>
 }
 
 // Normalize self_questions (jsonb array, JSON string, or plain string) to a
@@ -135,8 +140,15 @@ export async function loadSelfReads(
 
   // 2) all authored fragments — same rule: a silent empty list here erases
   // every star from the spiral.
+  // Order is PINNED (weight desc, then id): a section can hold two majors, and
+  // an unpinned fetch let the star flip between loads. Downstream still applies
+  // the full star rule, but nothing should ever depend on raw row order.
   const fragments = await withRetry(async () => {
-    const { data, error } = await supabase.from("fragments").select("*")
+    const { data, error } = await supabase
+      .from("fragments")
+      .select("*")
+      .order("weight", { ascending: false })
+      .order("id", { ascending: true })
     if (error) throw new Error(`fragments query failed: ${error.message}`)
     return (data ?? []) as FragmentRow[]
   })
@@ -198,7 +210,13 @@ export async function loadSelfReads(
       ? computeLensState(lenses, unlockedSlugs, matchedAll, responses)
       : null
 
-  return { chart, matched, answers, responses, lens }
+  // Depth per lens for the star rule. Empty when the lenses table was
+  // unavailable above — the tiebreak then falls back to weight + id, which is
+  // still fully deterministic.
+  const lensRanks: Record<string, number> = {}
+  for (const l of lenses) lensRanks[l.slug] = Number(l.sort_order) || 0
+
+  return { chart, matched, answers, responses, lens, lensRanks }
 }
 
 /**

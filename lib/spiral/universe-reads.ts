@@ -21,6 +21,9 @@ export type UniverseFragment = {
   trigger_type: string | null
   condition: unknown
   weight: number | null
+  /** which lens authored the read. The star rule's depth tiebreak needs this
+      when a deeper lens adds a second major to a section — see sections.ts. */
+  lens: string | null
 }
 
 // Default sigils by life domain, used when a fragment has no authored symbol.

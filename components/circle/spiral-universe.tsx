@@ -25,7 +25,8 @@ import {
   SECTION_ORDER,
   SECTION_COLORS,
   sectionFor,
-  MAJOR_WEIGHT,
+  lensRankFromRecord,
+  orderSection,
   type SectionKey,
 } from "@/lib/spiral/sections"
 
@@ -366,6 +367,7 @@ export function SpiralUniverse({
   matchedReads,
   initialResponses,
   guestFragments,
+  lensRanks,
 }: {
   people: Person[]
   relationships: Relationship[]
@@ -387,6 +389,10 @@ export function SpiralUniverse({
   initialResponses?: Record<string, "agree" | "disagree">
   /** guest: ALL fragments; matched client-side against the stashed chart */
   guestFragments?: UniverseFragment[]
+  /** lens slug → depth (lenses.sort_order, higher = deeper). Feeds the star
+      rule's depth tiebreak. A plain object because a Map cannot cross the
+      server→client props boundary. */
+  lensRanks?: Record<string, number>
 }) {
   const stageRef = useRef<HTMLDivElement | null>(null)
   const universeRef = useRef<HTMLDivElement | null>(null)
@@ -458,6 +464,10 @@ export function SpiralUniverse({
   // The fragments that become read objects, highest weight first (both the
   // server loader and matchFragments sort by weight desc).
   const fragments = guest ? guestMatched : (matchedReads ?? [])
+
+  // lens slug → depth for the star rule's tiebreak. Guests only ever see the
+  // first lens, so an empty rank is correct for them (every read same depth).
+  const lensRank = useMemo(() => lensRankFromRecord(lensRanks), [lensRanks])
 
   // ---- Layer 4: the revealed frontier --------------------------------------
   // How far the universe has been uncovered, in world units from center.
@@ -546,15 +556,12 @@ export function SpiralUniverse({
     const cursors = [READ_T_START_A, READ_T_START_B]
     const started = [false, false]
     return present.map((key, idx) => {
-      // Weight sorts; the heaviest weight>=7 read is THE major (heaviest
-      // overall stands in when none reaches the threshold), the rest follow
-      // as minis in weight order.
-      const frags = [...groups.get(key)!].sort(
-        (a, b) => (b.weight ?? 0) - (a.weight ?? 0),
-      )
-      const majorIdx = frags.findIndex((f) => (f.weight ?? 0) >= MAJOR_WEIGHT)
-      const majorFrag = frags[majorIdx === -1 ? 0 : majorIdx]
-      const ordered = [majorFrag, ...frags.filter((f) => f !== majorFrag)]
+      // THE STAR RULE (lib/spiral/sections.ts): weight desc, then lens depth
+      // desc (a deeper lens's major is that constellation's next chapter and
+      // takes the star), then id — so the star never depends on the order rows
+      // came back from the database. The heaviest read still stands in when
+      // nothing in the section reaches MAJOR_WEIGHT.
+      const ordered = orderSection(groups.get(key)!, lensRank)
       const color = SECTION_COLORS[key]
 
       const strand = idx % 2
@@ -602,7 +609,7 @@ export function SpiralUniverse({
         endR: reads[reads.length - 1].r,
       }
     })
-  }, [fragments])
+  }, [fragments, lensRank])
 
   // The creature is composed from THE JOURNEY ITSELF, never from points:
   //   - structure (which slots exist) comes from the section-clear rule over
@@ -629,7 +636,13 @@ export function SpiralUniverse({
   }, [initialResponses, agreed, disagreed])
 
   const creatureSignals = useMemo<AvatarSignals>(() => {
-    const { done, total } = sectionClearProgress(fragments, respondedIds)
+    // Same lensRank as the walk above, so the star the user sees in a section
+    // is the same read this clear math wants answered.
+    const { done, total } = sectionClearProgress(
+      fragments,
+      respondedIds,
+      lensRank,
+    )
     return {
       agrees: dispositionCounts.agrees,
       disagrees: dispositionCounts.disagrees,
@@ -637,7 +650,7 @@ export function SpiralUniverse({
       cleared: done,
       constellations: total,
     }
-  }, [dispositionCounts, fragments, respondedIds, answerCount])
+  }, [dispositionCounts, fragments, respondedIds, answerCount, lensRank])
 
   // Disc size follows the creature's structure (see discSizeFor), from the
   // same signals SelfCreature renders.

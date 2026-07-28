@@ -43,6 +43,7 @@ export default async function BrainPage() {
     .from("fragments")
     .select("*")
     .order("weight", { ascending: false })
+    .order("id", { ascending: true })
 
   const error = queryError ? { message: queryError.message } : null
   const fragments = (data ?? []) as Fragment[]

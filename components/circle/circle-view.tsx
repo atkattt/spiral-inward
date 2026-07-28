@@ -32,6 +32,7 @@ export function CircleView({
   matchedReads,
   initialResponses,
   guestFragments,
+  lensRanks,
 }: {
   userName: string
   initialRevealRadius: number
@@ -45,6 +46,8 @@ export function CircleView({
   initialResponses?: Record<string, "agree" | "disagree">
   /** guest: raw fragments, matched client-side against the stashed chart */
   guestFragments?: UniverseFragment[]
+  /** lens slug → depth (lenses.sort_order); feeds the star rule's tiebreak */
+  lensRanks?: Record<string, number>
 }) {
   const router = useRouter()
   const { guest, people, relationships } = useCircleData()
@@ -244,6 +247,7 @@ export function CircleView({
           matchedReads={matchedReads}
           initialResponses={initialResponses}
           guestFragments={guestFragments}
+          lensRanks={lensRanks}
         />
       </div>
 

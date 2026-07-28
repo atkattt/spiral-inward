@@ -11,6 +11,7 @@ import { SelfReads } from "@/components/self/self-reads"
 import { SelfView } from "@/components/spiral/self-view"
 import { CHAT_UNLOCK_RADIUS, unlockProgress } from "@/lib/self/unlock"
 import { sectionClearProgress } from "@/lib/self/lenses"
+import { lensRankFromRecord } from "@/lib/spiral/sections"
 import type { AvatarSignals } from "@/lib/self/avatar-slots"
 import type { SelfReadsData } from "@/lib/self/reads-data"
 
@@ -50,7 +51,13 @@ export function SelfSpaceView({
       if (v === "agree") agrees++
       else disagrees++
     }
-    const { done, total } = sectionClearProgress(reads?.matched ?? [], respondedIds)
+    // Same star rule AND same lens depths as /circle, so the being that shows
+    // up here is derived from the identical star in every constellation.
+    const { done, total } = sectionClearProgress(
+      reads?.matched ?? [],
+      respondedIds,
+      lensRankFromRecord(reads?.lensRanks),
+    )
     return {
       agrees,
       disagrees,
