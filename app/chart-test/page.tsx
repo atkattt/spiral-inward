@@ -1,6 +1,7 @@
-import { redirect } from "next/navigation"
-import { createClient } from "@/lib/supabase/server"
 import { ChartTestView } from "@/components/chart-test/chart-test-view"
+import { requireAdmin } from "@/lib/auth/admin"
+
+export const dynamic = "force-dynamic"
 
 export const metadata = {
   title: "Chart Test · Spiral Inward",
@@ -8,14 +9,8 @@ export const metadata = {
 }
 
 export default async function ChartTestPage() {
-  const supabase = await createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-
-  // Internal tooling — real accounts only. No guest bypass here (unlike
-  // /self and /circle), since there's nothing for a guest to see.
-  if (!user) redirect("/sign-in")
+  // Owner only: signed out -> /sign-in, signed in but not the owner -> /circle.
+  await requireAdmin()
 
   return <ChartTestView />
 }
