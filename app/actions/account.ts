@@ -1,9 +1,141 @@
 "use server"
 
+import type { SupabaseClient } from "@supabase/supabase-js"
 import { createClient } from "@/lib/supabase/server"
 import { db } from "@/lib/db"
 import { people, relationships, userProgress } from "@/lib/db/schema"
 import { eq } from "drizzle-orm"
+
+/**
+ * The user's journey lives in TWO databases:
+ *   - Supabase: charts, self_entries, conversations, read_responses
+ *   - Neon:     people, relationships, user_progress  (no FK to Supabase)
+ *
+ * Both reset paths below share this clearer so they can never drift apart.
+ *
+ * Every delete is VERIFIED. The previous version had two silent-failure holes
+ * that let a "reset" account come back mid-journey — answered reads still lit
+ * up, the frontier still wide open, old people still on the spiral:
+ *
+ *   1. Supabase deletes were fired without `.select()`. PostgREST reports
+ *      success for a delete that matched ZERO rows, so nothing distinguished
+ *      "erased 40 responses" from "erased nothing".
+ *   2. The three Neon deletes shared ONE `try { … } catch {}` that swallowed
+ *      every error. A single failure on `relationships` silently skipped
+ *      `people` AND `user_progress` too, and reported success.
+ *
+ * Now each statement reports its own row count, a real failure names its table,
+ * and only a genuinely missing table (42P01, older environments) is tolerated.
+ */
+
+/** Supabase journey tables, all keyed by `profile_id` and RLS-scoped. */
+const SUPABASE_JOURNEY_TABLES = [
+  "charts",
+  "self_entries",
+  "conversations",
+  "read_responses",
+] as const
+
+/** Postgres `undefined_table` — tolerated so older environments still reset. */
+const UNDEFINED_TABLE = "42P01"
+
+type ClearResult = {
+  error: string | null
+  counts: Record<string, number>
+}
+
+async function clearJourneyRows(
+  supabase: SupabaseClient,
+  userId: string,
+): Promise<ClearResult> {
+  const counts: Record<string, number> = {}
+
+  // --- Supabase side -------------------------------------------------------
+  // `.select("id")` makes the delete report the rows it actually removed.
+  // Every one of these tables has both a select_own and delete_own RLS policy,
+  // so a zero count here means the rows genuinely weren't there, not that RLS
+  // quietly refused.
+  const results = await Promise.all(
+    SUPABASE_JOURNEY_TABLES.map((table) =>
+      supabase.from(table).delete().eq("profile_id", userId).select("id"),
+    ),
+  )
+
+  for (const [i, result] of results.entries()) {
+    const table = SUPABASE_JOURNEY_TABLES[i]
+    if (result.error && result.error.code !== UNDEFINED_TABLE) {
+      return { error: `${table}: ${result.error.message}`, counts }
+    }
+    counts[table] = result.data?.length ?? 0
+  }
+
+  // --- Neon side -----------------------------------------------------------
+  // Deleted one at a time, each with its OWN error handling, so one failure
+  // can't silently skip the rest. `relationships` goes first: it references
+  // people.
+  const neonDeletes = [
+    {
+      table: "relationships",
+      run: () =>
+        db.delete(relationships).where(eq(relationships.userId, userId)),
+    },
+    { table: "people", run: () => db.delete(people).where(eq(people.userId, userId)) },
+    {
+      table: "user_progress",
+      run: () => db.delete(userProgress).where(eq(userProgress.userId, userId)),
+    },
+  ]
+
+  for (const { table, run } of neonDeletes) {
+    try {
+      const result = (await run()) as { rowCount?: number | null }
+      counts[table] = result?.rowCount ?? 0
+    } catch (e) {
+      const err = e as { code?: string; message?: string }
+      // Missing table in an older environment is fine; anything else is a real
+      // failure and must NOT be reported as a successful reset.
+      if (err?.code === UNDEFINED_TABLE) {
+        counts[table] = 0
+        continue
+      }
+      return {
+        error: `${table}: ${err?.message ?? "delete failed"}`,
+        counts,
+      }
+    }
+  }
+
+  return { error: null, counts }
+}
+
+/**
+ * Reset the profile's birth_place to the "pending" placeholder the DB trigger
+ * seeds new profiles with. The onboarding gate checks
+ * `birth_place !== "pending"`, so without this `ensureUserChart()` would
+ * silently RECOMPUTE the chart from retained birth data and skip onboarding.
+ *
+ * Setting ONLY birth_place is deliberate: nulling the other birth columns can
+ * violate NOT NULL constraints on live databases.
+ */
+async function resetBirthPlace(
+  supabase: SupabaseClient,
+  userId: string,
+): Promise<string | null> {
+  const { data, error } = await supabase
+    .from("profiles")
+    .update({ birth_place: "pending" })
+    .eq("id", userId)
+    .select("id")
+
+  if (error) return `profile reset: ${error.message}`
+  // A zero-row update means the profile row is gone. There is no
+  // profiles_insert_own RLS policy, so the app cannot recreate it — say so
+  // plainly instead of reporting a reset that didn't happen.
+  if (!data || data.length === 0) {
+    return "profile row is missing — the account can't be reset from here"
+  }
+  return null
+}
 
 /**
  * Erases the signed-in user's JOURNEY — chart, reads, entries, conversations,
@@ -19,54 +151,16 @@ export async function eraseJourney(): Promise<{ error: string | null }> {
 
   if (!user) return { error: "not signed in" }
 
-  const userId = user.id
-
-  // Supabase-side journey rows (each RLS-scoped to the user's own id).
-  const journeyTables = [
-    "charts",
-    "self_entries",
-    "conversations",
-    "read_responses",
-  ] as const
-  const results = await Promise.all(
-    journeyTables.map((table) =>
-      supabase.from(table).delete().eq("profile_id", userId),
-    ),
-  )
-  // Tolerate missing tables (42P01) in older environments; name the table
-  // in real failures so they can be diagnosed from the client toast.
-  const failedIndex = results.findIndex(
-    (r) => r.error && r.error.code !== "42P01",
-  )
-  if (failedIndex !== -1) {
-    const failed = results[failedIndex]
-    return {
-      error: `${journeyTables[failedIndex]}: ${failed.error?.message}`,
-    }
+  const { error, counts } = await clearJourneyRows(supabase, user.id)
+  if (error) {
+    console.error("[spiral-inward] eraseJourney failed:", error, counts)
+    return { error }
   }
 
-  // Reset the profile's birth_place back to the "pending" placeholder the
-  // DB trigger seeds new profiles with. Without this, ensureUserChart()
-  // would silently RECOMPUTE the chart from the retained birth data and
-  // skip onboarding — the journey wouldn't actually restart. Setting ONLY
-  // birth_place is deliberate: the onboarding gate checks
-  // `birth_place !== "pending"`, and nulling the other birth columns can
-  // violate NOT NULL constraints on live databases.
-  const { error: profileError } = await supabase
-    .from("profiles")
-    .update({ birth_place: "pending" })
-    .eq("id", userId)
-  if (profileError) return { error: `profile reset: ${profileError.message}` }
-
-  // Drizzle-side journey rows: the circle's people + bonds and the fog
-  // frontier (these drive the spiral markers and the avatar's growth).
-  // relationships first — it references people.
-  try {
-    await db.delete(relationships).where(eq(relationships.userId, userId))
-    await db.delete(people).where(eq(people.userId, userId))
-    await db.delete(userProgress).where(eq(userProgress.userId, userId))
-  } catch {
-    // tables may not exist yet in older environments — reset still succeeds
+  const profileError = await resetBirthPlace(supabase, user.id)
+  if (profileError) {
+    console.error("[spiral-inward] eraseJourney profile reset:", profileError)
+    return { error: profileError }
   }
 
   return { error: null }
@@ -74,8 +168,19 @@ export async function eraseJourney(): Promise<{ error: string | null }> {
 
 /**
  * Permanently deletes the signed-in user's own data rows (chart, reads,
- * conversations, profile). Every delete is scoped to the session user id and
+ * conversations, people, bonds, frontier) and returns the profile to its
+ * pre-onboarding state. Every delete is scoped to the session user id and
  * relies on row-level security, so a user can only ever remove their own rows.
+ *
+ * The profile ROW is deliberately kept (blanked, not deleted): it is only ever
+ * created by the `auth.users` insert trigger, and this action cannot delete the
+ * auth user (no service-role key — see the TODO below). Deleting the row while
+ * the auth user survived produced an account that could never be used again,
+ * because re-signing in reuses the same auth user, the trigger never re-fires,
+ * and there is no profiles_insert_own policy to recreate it.
+ *
+ * Because the row survives, nothing is cleaned up by FK cascade any more — so
+ * every journey table above is deleted EXPLICITLY and VERIFIED.
  *
  * TODO: This does NOT delete the underlying Supabase auth user — that requires
  * the service-role key (admin.deleteUser) which isn't available to the client
@@ -91,76 +196,16 @@ export async function deleteAccount(): Promise<{ error: string | null }> {
 
   if (!user) return { error: "not signed in" }
 
-  const userId = user.id
-
-  // Delete dependent data first, then the profile row. Each is scoped to the
-  // user's own id so RLS permits it. read_responses is the journey state
-  // (answered reads) — without deleting it, a returning user's spiral would
-  // rebuild mid-journey instead of starting fresh at the first star.
-  const deletions = [
-    supabase.from("charts").delete().eq("profile_id", userId),
-    supabase.from("self_entries").delete().eq("profile_id", userId),
-    supabase.from("conversations").delete().eq("profile_id", userId),
-    supabase.from("read_responses").delete().eq("profile_id", userId),
-  ]
-
-  const results = await Promise.all(deletions)
-  // Journey tables may not exist yet in older environments — ignore
-  // "relation does not exist" (42P01) but surface real failures.
-  const failed = results.find(
-    (r) => r.error && r.error.code !== "42P01",
-  )
-  if (failed?.error) {
-    return { error: failed.error.message }
+  const { error, counts } = await clearJourneyRows(supabase, user.id)
+  if (error) {
+    console.error("[spiral-inward] deleteAccount failed:", error, counts)
+    return { error }
   }
 
-  // Neon-side rows (Drizzle): the circle's people + bonds and the revealed
-  // frontier all live there, keyed by userId — delete them so nothing of the
-  // account's journey survives. relationships first (it references people).
-  // Tolerate missing tables in older environments.
-  try {
-    await db.delete(relationships).where(eq(relationships.userId, userId))
-    await db.delete(people).where(eq(people.userId, userId))
-    await db.delete(userProgress).where(eq(userProgress.userId, userId))
-  } catch {
-    // table may not exist yet — journey reset still succeeds
-  }
-
-  /**
-   * Blank the profile instead of DELETEing the row.
-   *
-   * Deleting it created an unrecoverable account: the profiles row is only ever
-   * created by the `auth.users` insert trigger, and this action cannot delete
-   * the auth user (no service-role key — see the TODO above). Signing back in
-   * with the same Google account reuses the existing auth.users row, so the
-   * trigger never re-fires and no profiles row comes back. The user then had a
-   * session pointing at a row that did not exist, onboarding's UPDATE silently
-   * matched zero rows, and they landed in a permanently empty spiral.
-   *
-   * Overwriting the birth columns erases the same personal data the DELETE did,
-   * and resetting birth_place to the placeholder puts the account back through
-   * onboarding exactly like a brand-new one. UPDATE also only needs the
-   * permission we know the session has.
-   */
-  const { error: profileError } = await supabase
-    .from("profiles")
-    .update({
-      birth_date: null,
-      birth_time: null,
-      birth_lat: null,
-      birth_lng: null,
-      timezone: null,
-      birth_place: "pending",
-    })
-    .eq("id", userId)
+  const profileError = await resetBirthPlace(supabase, user.id)
   if (profileError) {
-    // Some deployments make the birth columns NOT NULL; the placeholder alone
-    // is enough to force onboarding, so fall back to just that.
-    const { error: fallbackError } = await supabase
-      .from("profiles")
-      .update({ birth_place: "pending" })
-      .eq("id", userId)
-    if (fallbackError) return { error: fallbackError.message }
+    console.error("[spiral-inward] deleteAccount profile reset:", profileError)
+    return { error: profileError }
   }
 
   // Sign out on the server so the session cookie is cleared.

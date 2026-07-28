@@ -78,10 +78,12 @@ export async function persistBirthChart(
    * path, get told "saved", and have its onboarding stash cleared — silently
    * destroying the birth data and leaving a chartless, read-less spiral.
    *
-   * How the row goes missing: deleteAccount() removes it, but it cannot remove
-   * the underlying auth.users row (no service-role key). Signing back in with
-   * the same Google account therefore reuses the existing auth user, the insert
-   * trigger never re-fires, and no profiles row is recreated.
+   * How the row went missing: deleteAccount() used to DELETE it while being
+   * unable to delete the underlying auth.users row (no service-role key), so
+   * signing back in reused the auth user, the insert trigger never re-fired,
+   * and no profiles row came back. deleteAccount() now blanks the row instead,
+   * so this should no longer happen — but the check stays, because reporting a
+   * save that didn't happen is what destroyed the birth data last time.
    */
   const { data: updated, error: profileError } = await supabase
     .from("profiles")
@@ -91,7 +93,12 @@ export async function persistBirthChart(
 
   if (profileError) return { status: "error", message: profileError.message }
 
-  // No row to update — recreate it rather than pretending the write landed.
+  // No row to update — try to recreate it rather than pretending the write
+  // landed. NOTE: there is no `profiles_insert_own` RLS policy (the schema only
+  // defines select/update/delete for own rows), so this insert is expected to be
+  // refused with 42501 unless that policy is added. It's attempted anyway
+  // because it costs one round trip and fixes the account outright where the
+  // policy does exist.
   if (!updated || updated.length === 0) {
     const { error: insertError } = await supabase
       .from("profiles")
@@ -100,7 +107,10 @@ export async function persistBirthChart(
     if (insertError) {
       return {
         status: "error",
-        message: `profile row missing and could not be recreated (${insertError.message})`,
+        message:
+          insertError.code === "42501"
+            ? "your profile row is missing and the app isn't allowed to recreate it — this needs a profiles insert policy"
+            : `profile row missing and could not be recreated (${insertError.message})`,
       }
     }
   }
