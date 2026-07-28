@@ -291,9 +291,12 @@ function LockedChat({ states }: { states: LensClearState[] }) {
           <span
             key={s.slug}
             style={{
-              fontSize: 11,
+              fontSize: 12,
               letterSpacing: 0.6,
-              color: s.complete ? "#8a8a8a" : "#4a4a4a",
+              // #4a4a4a on this panel was ~2.3:1 — legible on a desktop
+              // monitor, effectively invisible at 12px on a phone. Kept quiet,
+              // but now actually readable.
+              color: s.complete ? "#a8a8a8" : "#7d7d7d",
               fontFamily: MONO,
             }}
           >
