@@ -59,7 +59,9 @@ export default function AsciiRippleSky() {
     let rows = 0
     let dpr = 1
 
-    function resize() {
+    // Declared as arrow consts (not hoisted `function`s) so TypeScript keeps
+    // the non-null narrowing of `canvas`/`ctx` from the guards above.
+    const resize = () => {
       dpr = Math.min(window.devicePixelRatio || 1, 2)
       const w = window.innerWidth
       const h = window.innerHeight
@@ -87,7 +89,7 @@ export default function AsciiRippleSky() {
     const GLOW_MIN = 0.15
     const GLOW_PERIOD = 9 // seconds per full glow-in / glow-out cycle
 
-    function frame(now: number) {
+    const frame = (now: number) => {
       // Pause drawing while the tab is hidden (keep a cheap rAF alive to resume).
       if (typeof document !== "undefined" && document.hidden) {
         if (!reduceMotion) raf = requestAnimationFrame(frame)

@@ -111,7 +111,9 @@ export default function SwirlCloudSky() {
     let bh = 0
     let bimg: ImageData | null = null
 
-    function resize() {
+    // Declared as arrow consts (not hoisted `function`s) so TypeScript keeps
+    // the non-null narrowing of `canvas`/`ctx` from the guards above.
+    const resize = () => {
       dpr = Math.min(window.devicePixelRatio || 1, 2)
       W = window.innerWidth
       H = window.innerHeight
@@ -136,7 +138,7 @@ export default function SwirlCloudSky() {
     window.addEventListener("resize", resize)
 
     // ---- render -----------------------------------------------------------
-    function renderDay(t: number) {
+    const renderDay = (t: number) => {
       if (!bctx || !bimg) return
       const d = bimg.data
       for (let y = 0; y < bh; y++) {
@@ -174,7 +176,7 @@ export default function SwirlCloudSky() {
     let last = 0
     const start = performance.now()
 
-    function loop(now: number) {
+    const loop = (now: number) => {
       // Pause the (expensive) cloud render entirely while the tab is hidden.
       if (typeof document !== "undefined" && document.hidden) {
         raf = requestAnimationFrame(loop)
