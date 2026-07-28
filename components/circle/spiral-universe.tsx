@@ -1,6 +1,14 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import {
+  memo,
+  startTransition,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react"
 import type { Mood } from "@/components/circle/SelfAvatar"
 import SelfCreature, { type SelfCreatureHandle } from "@/components/self/self-creature"
 import type { Person, Relationship } from "@/lib/db/schema"
@@ -879,19 +887,33 @@ export function SpiralUniverse({
       // next unanswered read would still be locked, the frontier stretches
       // just past it (capped at 2 steps so whole regions never flood open).
       // Persisted for authed users; guests stay in memory.
-      setRevealRadius((prev) => {
-        let next = prev + REVEAL_STEP
-        const nextReadR = reads
-          .filter((rd) => rd.read.id !== current.read.id && !respondedIds.has(rd.read.id))
-          .map((rd) => rd.r)
-          .filter((r) => r > next)
-          .sort((a, b) => a - b)[0]
-        if (nextReadR !== undefined) {
-          next = Math.min(Math.max(next, nextReadR + 12), prev + REVEAL_STEP * 2)
-        }
-        if (!guest) void saveRevealRadius(next).catch(() => {})
-        return next
-      })
+      // Computed from the mirror ref rather than inside the updater: the
+      // updater now runs inside a transition, where React may invoke it more
+      // than once, and the persist call below must not fire twice.
+      const prevR = revealRadiusRef.current
+      let nextR = prevR + REVEAL_STEP
+      const nextReadR = reads
+        .filter((rd) => rd.read.id !== current.read.id && !respondedIds.has(rd.read.id))
+        .map((rd) => rd.r)
+        .filter((r) => r > nextR)
+        .sort((a, b) => a - b)[0]
+      if (nextReadR !== undefined) {
+        nextR = Math.min(Math.max(nextR, nextReadR + 12), prevR + REVEAL_STEP * 2)
+      }
+      if (!guest) void saveRevealRadius(nextR).catch(() => {})
+      /**
+       * Expanding the frontier re-renders the whole ~1890-span nebula (~250ms).
+       * Because React batches, that landed in the SAME commit as the button's
+       * own pressed state — so the press had no visible effect until the fog
+       * finished, which is what read as "lag before it registers".
+       *
+       * Marking only the frontier as a transition lets the urgent updates (the
+       * pressed state, the creature's reaction) commit and paint first, then
+       * the fog rolls outward in a follow-up render. The 250ms of work still
+       * happens; it just stops blocking the acknowledgement.
+       */
+      ;(window as unknown as { __revealTarget?: number }).__revealTarget = nextR
+      startTransition(() => setRevealRadius(nextR))
       if (reactTimer.current) clearTimeout(reactTimer.current)
       reactTimer.current = setTimeout(() => {
         if (agreeIt) {
@@ -1523,111 +1545,21 @@ export function SpiralUniverse({
             the filter, ~60fps without). Gradients composite for free. When
             the frontier grows, new blobs fade in over ~1.2s (spread by
             radius), so the fog still visibly rolls outward. */}
-        <div
-          className="absolute left-0 top-0 select-none"
-          style={{ width: 0, height: 0 }}
-        >
-          {glyphs.map((g) => {
-            const lit = g.r <= revealRadius
-            const ext = extFade(g.t)
-            const spread = justRevealed(g.r)
-              ? Math.min(0.6, Math.max(0, (g.r - prevRevealRef.current) / REVEAL_STEP) * 0.6)
-              : 0
-            // Glow diameter ≈ the old blurred glyph's visual extent
-            // (fontSize×1.7 + 9px blur spilling both ways).
-            const glow = px2(g.size * 1.7 + 18)
-            return (
-              <span
-                key={`bloom-${g.key}`}
-                className="absolute rounded-full"
-                style={{
-                  left: px2(g.x),
-                  top: px2(g.y),
-                  width: glow,
-                  height: glow,
-                  // Peak alpha is VERY low: blur used to smear a glyph's thin
-                  // ink strokes across this whole area, so the equivalent
-                  // gradient must be a whisper or the fog washes out the
-                  // crisp glyphs on top of it.
-                  background:
-                    "radial-gradient(closest-side, rgba(189,214,238,0.11), rgba(189,214,238,0.035) 55%, transparent)",
-                  transform: "translate(-50%, -50%)",
-                  opacity: op6(lit ? Math.min(1, g.max * 2.4) * ext : 0),
-                  transition: "opacity 1.2s ease",
-                  transitionDelay: `${Math.max(spread, crawlDelay(g.t))}s`,
-                }}
-              />
-            )
-          })}
-        </div>
-
-        {/* ── Nebula, crisp layer ────────────────────────────────────────
-            The readable glyphs on top of the bloom.
-              • inside the frontier → lit cool tone; warms from dim ember to
-                its tone over ~1.2s (delayed by radius) as the frontier passes.
-              • outside → barely-there embers: very dim, desaturated, no glow.
-            PERF: the slow shimmer animates on ~6 phase-group WRAPPERS (each
-            with its own duration/offset) instead of per glyph — hundreds of
-            individually-animated nodes forced mobile compositors to manage a
-            layer per glyph and made panning feel laggy. Group opacity
-            multiplies each glyph's static opacity, so the cloud still
-            twinkles out of phase, at ~1% of the compositing cost.
-            Positions are deterministic (seeded RNG), so SSR + client agree. */}
-        {Array.from({ length: NEBULA_PHASES }, (_, phase) => (
-          <div
-            key={`shimmer-${phase}`}
-            className="animate-nebula-shimmer absolute left-0 top-0 select-none"
-            style={{
-              width: 0,
-              height: 0,
-              // The wrapper IS the shimmer: keyframes read --glyph-max as the
-              // peak, so 1 → group opacity breathes 0.62 → 1.
-              // @ts-expect-error custom property consumed by the shimmer keyframes
-              "--glyph-max": 1,
-              animationDuration: `${5.6 + phase * 1.15}s`,
-              animationDelay: `${phase * -1.9}s`,
-            }}
-          >
-            {glyphs
-              .filter((_, i) => i % NEBULA_PHASES === phase)
-              .map((g) => {
-                const lit = g.r <= revealRadius
-                const ext = extFade(g.t)
-                const spread = justRevealed(g.r)
-                  ? Math.min(0.6, Math.max(0, (g.r - prevRevealRef.current) / REVEAL_STEP) * 0.6)
-                  : 0
-                return (
-                  <span
-                    key={`glyph-${g.key}`}
-                    className="absolute select-none"
-                    style={{
-                      // Round to 2 decimals so full-precision floats don't
-                      // hydrate as a CSSOM-rounded mismatch.
-                      left: px2(g.x),
-                      top: px2(g.y),
-                      fontFamily: monoFont,
-                      fontSize: px2(g.size),
-                      lineHeight: 1,
-                      color: lit ? g.tone : "#4b515b",
-                      transform: "translate(-50%, -50%)",
-                      // Lit glyphs run at ~2x their scattered base brightness;
-                      // beyond the drawn extent (ext → 0) the fog thins to
-                      // sparse embers implying more.
-                      opacity: op6(
-                        lit
-                          ? Math.min(1, g.max * 2) * ext
-                          : Math.min(0.22, g.max * 0.6) * ext,
-                      ),
-                      transition: "color 1.2s ease, opacity 1.2s ease",
-                      transitionDelay: `${Math.max(spread, crawlDelay(g.t))}s`,
-                    }}
-                  >
-                    {g.char}
-                  </span>
-                )
-              })}
-          </div>
-        ))}
+        {/* PERF: extracted into a memoized child. These two layers are ~1890
+            spans, and they depend on NOTHING that a judgement changes. Inline,
+            every unrelated state change (opening a read, answering it, the
+            creature's reaction) re-reconciled all of them — a ~294ms long task
+            that blocked the button's own press feedback from painting for
+            ~300ms, which is the "lag before it registers" this fixes. */}
+        <NebulaLayers
+          glyphs={glyphs}
+          revealRadius={revealRadius}
+          prevReveal={prevRevealRef.current}
+          monoFont={monoFont}
+          visibleTEnd={visibleTEnd}
+          crawling={crawling}
+          initialTEnd={initialTEnd}
+        />
 
         {/* Bonds — faint dashed lines between connected people, in world
             coords. Drawn beneath the nodes via a zero-size, overflow-visible
@@ -2023,5 +1955,168 @@ export function SpiralUniverse({
     </div>
   )
 }
+
+/**
+ * The two nebula layers (bloom underlay + crisp glyphs), ~1890 spans total.
+ *
+ * Split out and memoized purely for responsiveness. The fog only depends on the
+ * glyph field and the revealed frontier — never on the panel, the pending
+ * judgement, or the creature's reaction. Rendered inline it was re-reconciled on
+ * every one of those state changes, producing a ~294ms long task that delayed
+ * the yes/no press feedback by ~300ms.
+ *
+ * `extFade`/`crawlDelay` are recreated here from scalar props rather than passed
+ * as callbacks: a fresh function identity each render would defeat memo's
+ * shallow compare and undo the whole point.
+ */
+const NebulaLayers = memo(function NebulaLayers({
+  glyphs,
+  revealRadius,
+  prevReveal,
+  monoFont,
+  visibleTEnd,
+  crawling,
+  initialTEnd,
+}: {
+  glyphs: Glyph[]
+  revealRadius: number
+  prevReveal: number
+  monoFont: string
+  visibleTEnd: number
+  crawling: boolean
+  initialTEnd: number
+}) {
+  const extFade = (t: number) => {
+    const fadeStart = visibleTEnd - 0.12
+    if (t <= fadeStart) return 1
+    if (t >= visibleTEnd) return 0
+    return 1 - (t - fadeStart) / 0.12
+  }
+  const crawlDelay = (t: number) =>
+    crawling && t > initialTEnd
+      ? ((t - initialTEnd) / Math.max(0.01, GLYPH_T_END - initialTEnd)) * 2
+      : 0
+  const justRevealed = (r: number) => r > prevReveal && r <= revealRadius
+  const spreadFor = (r: number) =>
+    justRevealed(r)
+      ? Math.min(0.6, Math.max(0, (r - prevReveal) / REVEAL_STEP) * 0.6)
+      : 0
+
+  return (
+    <>
+      {/* ── Nebula, glow underlay ──────────────────────────────────────
+          One layer holding a soft bloom blob per glyph. Lit (inside-
+          frontier) blobs carry the cool moonlit glow; locked ones sit at
+          opacity 0. PERF: these are radial-gradient discs — already soft,
+          NO blur filter. The old blur(9px) over ~500 text glyphs forced the
+          GPU to re-rasterize a huge filtered texture during every pan/zoom
+          frame, which is exactly the walkthrough lag (profiled: ~39fps with
+          the filter, ~60fps without). Gradients composite for free. When
+          the frontier grows, new blobs fade in over ~1.2s (spread by
+          radius), so the fog still visibly rolls outward. */}
+      <div
+        className="absolute left-0 top-0 select-none"
+        style={{ width: 0, height: 0 }}
+      >
+        {glyphs.map((g) => {
+          const lit = g.r <= revealRadius
+          const ext = extFade(g.t)
+          const spread = spreadFor(g.r)
+          // Glow diameter ≈ the old blurred glyph's visual extent
+          // (fontSize×1.7 + 9px blur spilling both ways).
+          const glow = px2(g.size * 1.7 + 18)
+          return (
+            <span
+              key={`bloom-${g.key}`}
+              className="absolute rounded-full"
+              style={{
+                left: px2(g.x),
+                top: px2(g.y),
+                width: glow,
+                height: glow,
+                // Peak alpha is VERY low: blur used to smear a glyph's thin
+                // ink strokes across this whole area, so the equivalent
+                // gradient must be a whisper or the fog washes out the
+                // crisp glyphs on top of it.
+                background:
+                  "radial-gradient(closest-side, rgba(189,214,238,0.11), rgba(189,214,238,0.035) 55%, transparent)",
+                transform: "translate(-50%, -50%)",
+                opacity: op6(lit ? Math.min(1, g.max * 2.4) * ext : 0),
+                transition: "opacity 1.2s ease",
+                transitionDelay: `${Math.max(spread, crawlDelay(g.t))}s`,
+              }}
+            />
+          )
+        })}
+      </div>
+
+      {/* ── Nebula, crisp layer ────────────────────────────────────────
+          The readable glyphs on top of the bloom.
+            • inside the frontier → lit cool tone; warms from dim ember to
+              its tone over ~1.2s (delayed by radius) as the frontier passes.
+            • outside → barely-there embers: very dim, desaturated, no glow.
+          PERF: the slow shimmer animates on ~6 phase-group WRAPPERS (each
+          with its own duration/offset) instead of per glyph — hundreds of
+          individually-animated nodes forced mobile compositors to manage a
+          layer per glyph and made panning feel laggy. Group opacity
+          multiplies each glyph's static opacity, so the cloud still
+          twinkles out of phase, at ~1% of the compositing cost.
+          Positions are deterministic (seeded RNG), so SSR + client agree. */}
+      {Array.from({ length: NEBULA_PHASES }, (_, phase) => (
+        <div
+          key={`shimmer-${phase}`}
+          className="animate-nebula-shimmer absolute left-0 top-0 select-none"
+          style={{
+            width: 0,
+            height: 0,
+            // The wrapper IS the shimmer: keyframes read --glyph-max as the
+            // peak, so 1 → group opacity breathes 0.62 → 1.
+            // @ts-expect-error custom property consumed by the shimmer keyframes
+            "--glyph-max": 1,
+            animationDuration: `${5.6 + phase * 1.15}s`,
+            animationDelay: `${phase * -1.9}s`,
+          }}
+        >
+          {glyphs
+            .filter((_, i) => i % NEBULA_PHASES === phase)
+            .map((g) => {
+              const lit = g.r <= revealRadius
+              const ext = extFade(g.t)
+              const spread = spreadFor(g.r)
+              return (
+                <span
+                  key={`glyph-${g.key}`}
+                  className="absolute select-none"
+                  style={{
+                    // Round to 2 decimals so full-precision floats don't
+                    // hydrate as a CSSOM-rounded mismatch.
+                    left: px2(g.x),
+                    top: px2(g.y),
+                    fontFamily: monoFont,
+                    fontSize: px2(g.size),
+                    lineHeight: 1,
+                    color: lit ? g.tone : "#4b515b",
+                    transform: "translate(-50%, -50%)",
+                    // Lit glyphs run at ~2x their scattered base brightness;
+                    // beyond the drawn extent (ext → 0) the fog thins to
+                    // sparse embers implying more.
+                    opacity: op6(
+                      lit
+                        ? Math.min(1, g.max * 2) * ext
+                        : Math.min(0.22, g.max * 0.6) * ext,
+                    ),
+                    transition: "color 1.2s ease, opacity 1.2s ease",
+                    transitionDelay: `${Math.max(spread, crawlDelay(g.t))}s`,
+                  }}
+                >
+                  {g.char}
+                </span>
+              )
+            })}
+        </div>
+      ))}
+    </>
+  )
+})
 
 

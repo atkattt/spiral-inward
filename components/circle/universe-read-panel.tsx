@@ -74,13 +74,25 @@ export function UniverseReadPanel({
    */
   const [chosen, setChosen] = useState<"yes" | "no" | null>(null)
 
+  /**
+   * Re-entry guard. This has to be a ref, not the `chosen` state above.
+   *
+   * `setChosen` is batched, so several clicks dispatched within one tick all
+   * observe the pre-update closure where `chosen` is still null — a state check
+   * lets every one of them through. Measured: five fast taps sent five
+   * judgements even with the state guard in place. A ref mutates synchronously,
+   * so the second tap sees the latch the first tap set.
+   */
+  const lockedRef = useRef(false)
+
   const choose = useCallback(
     (agree: boolean) => {
-      if (chosen) return
+      if (lockedRef.current) return
+      lockedRef.current = true
       setChosen(agree ? "yes" : "no")
       onJudge(agree)
     },
-    [chosen, onJudge],
+    [onJudge],
   )
 
   // Reset the drag offset (and the latched choice) whenever new content arrives.
@@ -88,6 +100,7 @@ export function UniverseReadPanel({
     if (data) {
       setDragY(0)
       setChosen(null)
+      lockedRef.current = false
     }
   }, [data])
 
