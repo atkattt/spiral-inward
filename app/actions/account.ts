@@ -126,12 +126,41 @@ export async function deleteAccount(): Promise<{ error: string | null }> {
     // table may not exist yet — journey reset still succeeds
   }
 
+  /**
+   * Blank the profile instead of DELETEing the row.
+   *
+   * Deleting it created an unrecoverable account: the profiles row is only ever
+   * created by the `auth.users` insert trigger, and this action cannot delete
+   * the auth user (no service-role key — see the TODO above). Signing back in
+   * with the same Google account reuses the existing auth.users row, so the
+   * trigger never re-fires and no profiles row comes back. The user then had a
+   * session pointing at a row that did not exist, onboarding's UPDATE silently
+   * matched zero rows, and they landed in a permanently empty spiral.
+   *
+   * Overwriting the birth columns erases the same personal data the DELETE did,
+   * and resetting birth_place to the placeholder puts the account back through
+   * onboarding exactly like a brand-new one. UPDATE also only needs the
+   * permission we know the session has.
+   */
   const { error: profileError } = await supabase
     .from("profiles")
-    .delete()
+    .update({
+      birth_date: null,
+      birth_time: null,
+      birth_lat: null,
+      birth_lng: null,
+      timezone: null,
+      birth_place: "pending",
+    })
     .eq("id", userId)
   if (profileError) {
-    return { error: profileError.message }
+    // Some deployments make the birth columns NOT NULL; the placeholder alone
+    // is enough to force onboarding, so fall back to just that.
+    const { error: fallbackError } = await supabase
+      .from("profiles")
+      .update({ birth_place: "pending" })
+      .eq("id", userId)
+    if (fallbackError) return { error: fallbackError.message }
   }
 
   // Sign out on the server so the session cookie is cleared.

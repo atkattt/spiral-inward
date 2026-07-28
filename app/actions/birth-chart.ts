@@ -61,19 +61,49 @@ export async function persistBirthChart(
     return { status: "error", message: "incomplete birth data" }
   }
 
-  const { error: profileError } = await supabase
+  const birthColumns = {
+    birth_date: birth.date,
+    birth_time: birth.time,
+    birth_place: birth.place,
+    birth_lat: birth.lat,
+    birth_lng: birth.lng,
+    timezone: birth.timezone,
+  }
+
+  /**
+   * `.select()` is what makes this honest. A bare UPDATE that matches ZERO rows
+   * is not an error in PostgREST — it reports success. Because the profiles row
+   * only ever comes from the `auth.users` insert trigger (nothing in the app
+   * inserts one), an account whose profiles row went missing would take this
+   * path, get told "saved", and have its onboarding stash cleared — silently
+   * destroying the birth data and leaving a chartless, read-less spiral.
+   *
+   * How the row goes missing: deleteAccount() removes it, but it cannot remove
+   * the underlying auth.users row (no service-role key). Signing back in with
+   * the same Google account therefore reuses the existing auth user, the insert
+   * trigger never re-fires, and no profiles row is recreated.
+   */
+  const { data: updated, error: profileError } = await supabase
     .from("profiles")
-    .update({
-      birth_date: birth.date,
-      birth_time: birth.time,
-      birth_place: birth.place,
-      birth_lat: birth.lat,
-      birth_lng: birth.lng,
-      timezone: birth.timezone,
-    })
+    .update(birthColumns)
     .eq("id", user.id)
+    .select("id")
 
   if (profileError) return { status: "error", message: profileError.message }
+
+  // No row to update — recreate it rather than pretending the write landed.
+  if (!updated || updated.length === 0) {
+    const { error: insertError } = await supabase
+      .from("profiles")
+      .insert({ id: user.id, ...birthColumns })
+
+    if (insertError) {
+      return {
+        status: "error",
+        message: `profile row missing and could not be recreated (${insertError.message})`,
+      }
+    }
+  }
 
   const upsertError = await upsertChart(supabase, user.id, chart)
   if (upsertError) return { status: "error", message: upsertError }
