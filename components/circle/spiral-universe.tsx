@@ -850,6 +850,8 @@ export function SpiralUniverse({
     (agreeIt: boolean) => {
       const current = panel
       if (!current) return
+      ;(window as unknown as { __judgeCount?: number }).__judgeCount =
+        ((window as unknown as { __judgeCount?: number }).__judgeCount ?? 0) + 1
       if (agreeIt) agree(current.read)
       else disagree(current.read, "skip")
       // Fragment reads persist to read_responses — the SAME table /self

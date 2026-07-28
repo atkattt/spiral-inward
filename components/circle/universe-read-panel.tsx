@@ -57,9 +57,38 @@ export function UniverseReadPanel({
   // the neutral grey when no accent is provided.
   const accent = data?.accent ?? "#9a9a9a"
 
-  // Reset the drag offset whenever new content arrives.
+  /**
+   * Which command was just pressed, latched the instant it is clicked.
+   *
+   * The parent deliberately keeps the panel open ~820ms after a judgement so
+   * the creature's reaction can play. Without this, nothing in the panel
+   * changed during that window, so the press read as an unresponsive delay —
+   * the click had registered, it just looked like it hadn't. Latching locally
+   * (rather than waiting on the parent) paints the confirmation on the very
+   * next frame.
+   *
+   * It also makes the panel single-shot: the handler is ignored once a choice
+   * is latched, so extra taps inside the linger window can't fire onJudge
+   * again. Previously three fast taps sent three judgements — duplicating the
+   * read_responses write and stepping the reveal frontier three times.
+   */
+  const [chosen, setChosen] = useState<"yes" | "no" | null>(null)
+
+  const choose = useCallback(
+    (agree: boolean) => {
+      if (chosen) return
+      setChosen(agree ? "yes" : "no")
+      onJudge(agree)
+    },
+    [chosen, onJudge],
+  )
+
+  // Reset the drag offset (and the latched choice) whenever new content arrives.
   useEffect(() => {
-    if (data) setDragY(0)
+    if (data) {
+      setDragY(0)
+      setChosen(null)
+    }
   }, [data])
 
   // Height of the "sky" — the dark region between the viewport top and the
@@ -205,10 +234,20 @@ export function UniverseReadPanel({
 
           {/* yes / no commands */}
           <div className="mt-6 flex gap-3">
-            <CmdButton variant="yes" onClick={() => onJudge(true)}>
+            <CmdButton
+              variant="yes"
+              onClick={() => choose(true)}
+              chosen={chosen === "yes"}
+              dimmed={chosen === "no"}
+            >
               yes
             </CmdButton>
-            <CmdButton variant="no" onClick={() => onJudge(false)}>
+            <CmdButton
+              variant="no"
+              onClick={() => choose(false)}
+              chosen={chosen === "no"}
+              dimmed={chosen === "yes"}
+            >
               no
             </CmdButton>
           </div>
@@ -224,24 +263,33 @@ function CmdButton({
   variant,
   onClick,
   children,
+  chosen = false,
+  dimmed = false,
 }: {
   variant: "yes" | "no"
   onClick: () => void
   children: React.ReactNode
+  /** This command was the one pressed — hold it lit while the panel lingers. */
+  chosen?: boolean
+  /** The OTHER command was pressed — recede so the choice reads clearly. */
+  dimmed?: boolean
 }) {
   const [hover, setHover] = useState(false)
+  // `chosen` outranks hover: once pressed, the button stays lit even as the
+  // pointer leaves, so the confirmation survives the whole linger window.
+  const lit = hover || chosen
   const palette =
     variant === "yes"
       ? {
-          color: hover ? "#8fe0a3" : "#5fa873",
-          border: hover ? "#3f8a55" : "#1f3a28",
-          bg: hover ? "rgba(95,168,115,.1)" : "transparent",
+          color: lit ? "#8fe0a3" : "#5fa873",
+          border: chosen ? "#5fa873" : lit ? "#3f8a55" : "#1f3a28",
+          bg: chosen ? "rgba(95,168,115,.22)" : lit ? "rgba(95,168,115,.1)" : "transparent",
           glyph: "✓",
         }
       : {
-          color: hover ? "#e88f9c" : "#b0606e",
-          border: hover ? "#8a3f4c" : "#3a1f24",
-          bg: hover ? "rgba(176,96,110,.1)" : "transparent",
+          color: lit ? "#e88f9c" : "#b0606e",
+          border: chosen ? "#b0606e" : lit ? "#8a3f4c" : "#3a1f24",
+          bg: chosen ? "rgba(176,96,110,.22)" : lit ? "rgba(176,96,110,.1)" : "transparent",
           glyph: "✕",
         }
   return (
@@ -250,12 +298,17 @@ function CmdButton({
       onClick={onClick}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
+      aria-pressed={chosen}
       className="flex-1 rounded-lg px-2.5 py-3 text-[13px] tracking-wide transition-all"
       style={{
         background: palette.bg,
         border: `1px solid ${palette.border}`,
         color: palette.color,
         fontFamily: "inherit",
+        // The unpicked command fades back rather than disappearing, so the
+        // panel doesn't visibly reflow while it's on its way out.
+        opacity: dimmed ? 0.35 : 1,
+        transform: chosen ? "scale(0.97)" : "scale(1)",
       }}
     >
       <span style={{ opacity: 0.5 }}>[</span> {palette.glyph} {children}{" "}
