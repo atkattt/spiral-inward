@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { toast } from "sonner"
+import { toast } from "@/components/ui/terminal-toast"
 import { ArrowLeft } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Starfield } from "@/components/starfield"

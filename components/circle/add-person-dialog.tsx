@@ -8,7 +8,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { toast } from "sonner"
+import { toast } from "@/components/ui/terminal-toast"
 
 // The onboarding terminal's visual language, mirrored here so adding a
 // person feels like the same ritual as entering your own details:

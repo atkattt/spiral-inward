@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { toast } from "sonner"
+import { toast } from "@/components/ui/terminal-toast"
 import { Check, X } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useSpiral } from "@/components/spiral/spiral-provider"

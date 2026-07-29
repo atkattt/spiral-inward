@@ -11,7 +11,7 @@ import {
   type RelationshipKind,
 } from "@/lib/relationships"
 import { clearBirthStash } from "@/lib/birth-data"
-import { toast } from "sonner"
+import { toast } from "@/components/ui/terminal-toast"
 import { eraseJourney } from "@/app/actions/account"
 import { ConnectDialog } from "@/components/circle/connect-dialog"
 import { PersonDetail, type Bond } from "@/components/circle/person-detail"

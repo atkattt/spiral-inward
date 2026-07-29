@@ -30,15 +30,22 @@ const Toaster = ({ ...props }: ToasterProps) => {
       }}
       style={
         {
-          "--normal-bg": "var(--popover)",
-          "--normal-text": "var(--popover-foreground)",
-          "--normal-border": "var(--border)",
-          "--border-radius": "var(--radius)",
+          // Fallback shell for any toast that ISN'T routed through
+          // components/ui/terminal-toast. Hardcoded grey rather than
+          // var(--popover), which is oklch(0.19 0.025 275) — chroma at hue 275
+          // reads as navy blue, which is what made these look off-brand.
+          "--normal-bg": "#232323",
+          "--normal-text": "rgba(255,255,255,0.92)",
+          "--normal-border": "rgba(255,255,255,0.16)",
+          "--border-radius": "10px",
         } as React.CSSProperties
       }
       toastOptions={{
+        // Terminal toasts draw their own grey/outlined shell, so sonner's box
+        // would double the border and padding around them.
+        unstyled: true,
         classNames: {
-          toast: "cn-toast",
+          toast: "cn-toast w-full",
         },
       }}
       {...props}

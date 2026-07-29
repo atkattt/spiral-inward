@@ -9,7 +9,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { toast } from "sonner"
+import { toast } from "@/components/ui/terminal-toast"
 import { Link2, Trash2, X, ChevronRight } from "lucide-react"
 import { ReadCard } from "@/components/spiral/read-card"
 import { useSpiral } from "@/components/spiral/spiral-provider"
