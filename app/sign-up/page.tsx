@@ -40,19 +40,20 @@ export default async function SignUpPage() {
       <div className="relative z-10 inline-flex items-center justify-center">
         {/* Wordmark — this may be a visitor's first screen, so the app names
             itself. Letters flicker into ascii glyphs and back, the same feel as
-            the loading screen's morphing display. Now sits just above the
-            button and spans its width: `justify-between` spreads the
-            fixed-1ch cells across the line instead of a fixed tracking value,
-            so it lines up with the button edges at any text length. */}
+            the loading screen's morphing display. Sits just above the button
+            and matches its width.
+
+            Back on the original 0.25em tracking; the width match now comes from
+            scaling the type instead of stretching the gaps. The negative right
+            margin cancels the trailing letter-space CSS adds after the final
+            character, which would otherwise leave the line looking shifted
+            left of the button edge. */}
         <Link
           href="/"
           aria-label="spiral inward — home"
-          className="absolute bottom-full left-0 mb-5 w-full font-mono text-[10px] lowercase text-foreground"
+          className="absolute bottom-full left-0 mb-4 -mr-[0.25em] flex w-full justify-center font-mono text-[25.2px] leading-none tracking-[0.25em] lowercase text-foreground"
         >
-          <GlyphFlickerText
-            text="spiral inward"
-            className="flex w-full justify-between"
-          />
+          <GlyphFlickerText text="spiral inward" />
         </Link>
 
         <AuthForm mode="sign-up" />
