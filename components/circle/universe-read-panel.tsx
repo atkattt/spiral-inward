@@ -34,11 +34,20 @@ const mono =
 
 export function UniverseReadPanel({
   data,
+  answered = null,
   onJudge,
   onClose,
   stage,
 }: {
   data: PanelData | null
+  /**
+   * The verdict this read already carried when it was opened, or null for a
+   * first-time read. When set, the panel opens in its ANSWERED state — showing
+   * what the user said instead of two live commands — with an edit affordance
+   * to change it. Captured at open time by the parent, so it never flips
+   * mid-linger right after a fresh press.
+   */
+  answered?: "agree" | "disagree" | null
   onJudge: (agree: boolean) => void
   onClose: () => void
   /**
@@ -85,6 +94,13 @@ export function UniverseReadPanel({
    */
   const lockedRef = useRef(false)
 
+  /**
+   * True once the user asks to change an already-answered read, which swaps the
+   * answered summary back to the two live commands. Reset per read below, so
+   * reopening a read always starts from the calm answered state.
+   */
+  const [editing, setEditing] = useState(false)
+
   const choose = useCallback(
     (agree: boolean) => {
       if (lockedRef.current) return
@@ -100,6 +116,7 @@ export function UniverseReadPanel({
     if (data) {
       setDragY(0)
       setChosen(null)
+      setEditing(false)
       lockedRef.current = false
     }
   }, [data])
@@ -245,30 +262,88 @@ export function UniverseReadPanel({
             {data?.body}
           </div>
 
-          {/* yes / no commands */}
-          <div className="mt-6 flex gap-3">
-            <CmdButton
-              variant="yes"
-              onClick={() => choose(true)}
-              chosen={chosen === "yes"}
-              dimmed={chosen === "no"}
-            >
-              yes
-            </CmdButton>
-            <CmdButton
-              variant="no"
-              onClick={() => choose(false)}
-              chosen={chosen === "no"}
-              dimmed={chosen === "yes"}
-            >
-              no
-            </CmdButton>
-          </div>
+          {/* A read already answered shows WHAT was said and offers a change,
+              rather than two live commands that hide the existing choice.
+              `chosen` takes precedence so a fresh press still gets its own
+              confirmation, even when re-answering. */}
+          {answered && !editing && !chosen ? (
+            <AnsweredSummary
+              verdict={answered}
+              onEdit={() => setEditing(true)}
+            />
+          ) : (
+            /* yes / no commands */
+            <div className="mt-6 flex gap-3">
+              <CmdButton
+                variant="yes"
+                onClick={() => choose(true)}
+                chosen={chosen === "yes"}
+                dimmed={chosen === "no"}
+              >
+                yes
+              </CmdButton>
+              <CmdButton
+                variant="no"
+                onClick={() => choose(false)}
+                chosen={chosen === "no"}
+                dimmed={chosen === "yes"}
+              >
+                no
+              </CmdButton>
+            </div>
+          )}
         </div>
 
         <style>{`@keyframes urpFadeIn { from { opacity: 0; } to { opacity: 1; } }`}</style>
       </div>
     </>
+  )
+}
+
+/**
+ * The answered state: a quiet row stating the verdict the user already gave,
+ * in the same green/rose language as the commands it replaces, plus an edit
+ * affordance. Deliberately calm — this is a record, not a prompt.
+ */
+function AnsweredSummary({
+  verdict,
+  onEdit,
+}: {
+  verdict: "agree" | "disagree"
+  onEdit: () => void
+}) {
+  const yes = verdict === "agree"
+  // Same palette the yes/no commands use, so the record reads as the same
+  // system rather than new chrome.
+  const c = yes ? "#5fa873" : "#b0606e"
+  return (
+    <div
+      className="mt-6 flex items-center justify-between gap-3 rounded-lg px-3 py-3"
+      style={{ border: `1px solid ${c}55`, background: `${c}14` }}
+    >
+      <span
+        className="text-[12.5px] lowercase tracking-[1px]"
+        style={{ color: c }}
+      >
+        <span style={{ opacity: 0.5 }}>[</span> {yes ? "\u2713" : "\u2715"} you
+        said {yes ? "yes" : "no"} <span style={{ opacity: 0.5 }}>]</span>
+      </span>
+      <button
+        type="button"
+        onClick={onEdit}
+        className="shrink-0 rounded-md px-2 py-1 text-[10px] uppercase tracking-[1.5px]"
+        style={{
+          color: "#8a8578",
+          background: "transparent",
+          border: "1px solid #2a2a2a",
+          fontFamily: "inherit",
+          cursor: "pointer",
+          transition: "color .18s ease, border-color .18s ease",
+        }}
+      >
+        edit
+      </button>
+    </div>
   )
 }
 

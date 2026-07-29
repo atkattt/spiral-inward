@@ -460,16 +460,47 @@ export function SpiralUniverse({
   const downTargetRef = useRef<HTMLElement | null>(null)
 
   const { agree, disagree, agreed, disagreed } = useSpiral()
-  // Ids of every read the user has responded to (agreed OR disagreed):
-  // seeded from the SAVED read_responses rows (same table /self reads), plus
-  // anything answered this session. COMPLETED reads shed their ring and live
-  // bare in their accent color.
-  const respondedIds = useMemo(() => {
-    const s = new Set<string>(Object.keys(initialResponses ?? {}))
-    for (const r of agreed) s.add(r.id)
-    for (const r of disagreed) s.add(r.id)
-    return s
-  }, [agreed, disagreed, initialResponses])
+
+  /**
+   * URGENT answer layer — the fix for "the next read takes a beat to light up".
+   *
+   * `agree`/`disagree` are written inside a transition (see `judge`), so the
+   * provider's lists land at LOW priority. Since the cursor ring is derived
+   * from those lists, the ring couldn't move until the transition committed —
+   * and that commit carries the ~250ms nebula/fog re-render with it. The press
+   * felt instant but the NEXT star only lit up once the fog finished.
+   *
+   * This mirror is set urgently in the same handler, so the cursor advances on
+   * the next frame while the heavy work still streams in behind it. It only
+   * ever ADDS the same verdicts the provider is about to hold, so the two agree
+   * once the transition lands.
+   */
+  const [justAnswered, setJustAnswered] = useState<
+    Record<string, "agree" | "disagree">
+  >({})
+
+  // id -> verdict for every read the user has responded to: the SAVED
+  // read_responses rows (same table /self reads), plus anything answered this
+  // session, plus the urgent layer above. Single source for the cursor, the
+  // marker states, the counts, and the panel's "already answered" state.
+  const responseById = useMemo(() => {
+    const m = new Map<string, "agree" | "disagree">(
+      Object.entries(initialResponses ?? {}),
+    )
+    for (const r of agreed) m.set(r.id, "agree")
+    for (const r of disagreed) m.set(r.id, "disagree")
+    // Last so a just-pressed verdict outranks stale saved state when a read is
+    // re-answered.
+    for (const [id, v] of Object.entries(justAnswered)) m.set(id, v)
+    return m
+  }, [initialResponses, agreed, disagreed, justAnswered])
+
+  // Ids of every read the user has responded to. COMPLETED reads shed their
+  // ring and live bare in their accent color.
+  const respondedIds = useMemo(
+    () => new Set<string>(responseById.keys()),
+    [responseById],
+  )
 
   // Guest matching: guests have no charts row — their chart was computed by
   // the onboarding ritual and stashed in local/sessionStorage. Run the SAME
@@ -528,6 +559,9 @@ export function SpiralUniverse({
     read: Read
     fragment?: boolean
     mood?: ReadMood
+    /** The verdict this read already carried when the panel was opened, or
+     *  null for a first-time read. Drives the panel's answered state. */
+    prior?: "agree" | "disagree" | null
   } | null>(null)
   // Mood ease-in: when a panel opens, the creature keeps NEUTRAL behavior for
   // a beat, then eases into the read's mood (~600ms ramp via CSS transitions +
@@ -651,20 +685,17 @@ export function SpiralUniverse({
   //     judged this session.
   //   - the aura grows one permanent glyph per written answer.
   // /self derives the exact same signals, so the being is identical on both.
+  // Reads the shared verdict map so the creature reacts on the same urgent
+  // frame as the cursor, instead of waiting for the deferred provider write.
   const dispositionCounts = useMemo(() => {
-    const byId = new Map<string, "agree" | "disagree">(
-      Object.entries(initialResponses ?? {}),
-    )
-    for (const r of agreed) byId.set(r.id, "agree")
-    for (const r of disagreed) byId.set(r.id, "disagree")
     let agrees = 0
     let disagrees = 0
-    for (const v of byId.values()) {
+    for (const v of responseById.values()) {
       if (v === "agree") agrees++
       else disagrees++
     }
     return { agrees, disagrees }
-  }, [initialResponses, agreed, disagreed])
+  }, [responseById])
 
   const creatureSignals = useMemo<AvatarSignals>(() => {
     // Same lensRank as the walk above, so the star the user sees in a section
@@ -829,16 +860,31 @@ export function SpiralUniverse({
   // may open; unanswered reads further along stay sealed even when visible
   // inside the fog. Ref-backed because openRead is a stable callback and the
   // cursor memo lives further down the component.
-  const readGateRef = useRef<{ cursor: string | null; responded: Set<string> }>({
+  const readGateRef = useRef<{
+    cursor: string | null
+    responded: Set<string>
+    verdicts: Map<string, "agree" | "disagree">
+  }>({
     cursor: null,
     responded: new Set(),
+    verdicts: new Map(),
   })
 
   const openRead = useCallback((r: PlacedRead) => {
     const gate = readGateRef.current
     if (!gate.responded.has(r.read.id) && r.read.id !== gate.cursor) return
     if (reactTimer.current) clearTimeout(reactTimer.current)
-    setPanel({ data: r.panel, read: r.read, fragment: true, mood: r.mood })
+    setPanel({
+      data: r.panel,
+      read: r.read,
+      fragment: true,
+      mood: r.mood,
+      // Captured AT OPEN so the panel shows "you said yes" only for a read that
+      // was already answered before this visit. Reading it live would flip the
+      // panel into its answered state mid-linger, fighting the press
+      // confirmation the user just triggered.
+      prior: gate.verdicts.get(r.read.id) ?? null,
+    })
     setReactMood("curious") // lean in
     // Attunement: the creature (glyphs + glow) adopts the read's accent while
     // the panel is open — SelfCreature eases the color over ~500ms.
@@ -869,6 +915,17 @@ export function SpiralUniverse({
        * Safe to defer because the panel latches its own choice locally, so the
        * confirmation never depends on this state round-tripping back down.
        */
+      /**
+       * URGENT: advance the cursor now. This is the one piece of answer state
+       * that must NOT be deferred — it's what lights up the next read. The
+       * provider write below stays in a transition; this mirror just lets the
+       * ring move without waiting for it (and for the fog behind it).
+       */
+      setJustAnswered((prev) => ({
+        ...prev,
+        [current.read.id]: agreeIt ? "agree" : "disagree",
+      }))
+
       startTransition(() => {
         if (agreeIt) agree(current.read)
         else disagree(current.read, "skip")
@@ -901,6 +958,10 @@ export function SpiralUniverse({
       // Computed from the mirror ref rather than inside the updater: the
       // updater now runs inside a transition, where React may invoke it more
       // than once, and the persist call below must not fire twice.
+      // Re-answering a read the user had already judged (now possible via the
+      // panel's edit affordance) must NOT step the frontier again — that would
+      // let someone flip one read back and forth to flood the sky open.
+      const isReanswer = current.prior != null
       const prevR = revealRadiusRef.current
       let nextR = prevR + REVEAL_STEP
       const nextReadR = reads
@@ -911,7 +972,8 @@ export function SpiralUniverse({
       if (nextReadR !== undefined) {
         nextR = Math.min(Math.max(nextR, nextReadR + 12), prevR + REVEAL_STEP * 2)
       }
-      if (!guest) void saveRevealRadius(nextR).catch(() => {})
+      if (isReanswer) nextR = prevR
+      if (!guest && !isReanswer) void saveRevealRadius(nextR).catch(() => {})
       /**
        * Expanding the frontier re-renders the whole ~1890-span nebula (~250ms).
        * Because React batches, that landed in the SAME commit as the button's
@@ -1082,7 +1144,11 @@ export function SpiralUniverse({
     return null
   }, [reads, respondedIds])
   // Keep the sequential-open gate in sync (see openRead).
-  readGateRef.current = { cursor: currentReadId, responded: respondedIds }
+  readGateRef.current = {
+    cursor: currentReadId,
+    responded: respondedIds,
+    verdicts: responseById,
+  }
 
   // FIRST-READ COACH MARK — a quiet line of sky-language shown only to a
   // visitor who has never answered anything: "start here. this one's about
@@ -1924,6 +1990,7 @@ export function SpiralUniverse({
           rather than a fixed idle loop, tinted the read's accent. */}
       <UniverseReadPanel
         data={panel?.data ?? null}
+        answered={panel?.prior ?? null}
         onJudge={judge}
         onClose={closePanel}
         stage={
