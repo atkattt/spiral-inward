@@ -2086,7 +2086,12 @@ export function SpiralUniverse({
             type="button"
             onClick={goHome}
             aria-label="Take me back"
-            className="flex h-12 items-center justify-center rounded-lg px-4 animate-in fade-in duration-300"
+            /* rounded-full, matching "enter the spiral" and the name plate —
+               every other command in the app is a pill, so the lone rounded-lg
+               rectangle read as a different kind of control. Horizontal padding
+               is >= the 24px pill radius so the label clears the curve instead
+               of crowding it (the same reason ENTER carries ~21-29px). */
+            className="flex h-12 items-center justify-center rounded-full px-6 animate-in fade-in duration-300"
             style={{
               fontFamily: monoFont,
               backgroundColor: "#0d0d0d",
@@ -2094,7 +2099,12 @@ export function SpiralUniverse({
               color: "#fff",
             }}
           >
-            <span className="text-[10px] lowercase leading-none tracking-widest">
+            {/* 13px to match the "you" name plate exactly — same size AND same
+                Geist Pixel family, so the two read as one voice. */}
+            <span
+              className="lowercase tracking-widest"
+              style={{ fontSize: 13, lineHeight: 1.15 }}
+            >
               take me back
             </span>
           </button>
