@@ -360,11 +360,20 @@ function personPoint(i: number, n: number) {
  *
  * Derived the same way people are (angle from t, radius pushed into the dark
  * pocket between strands) so it belongs to the same visual system: at
- * t = 0.206 the spiral angle is ~132° — down and to the left — and the radial
- * push puts it ~148 world units out, clear of the widest creature disc.
+ * t = 0.206 the spiral angle is ~132° — down and to the left.
+ *
+ * GAP_FRAC 0.5 centers it between the two strands it sits between. The galaxy
+ * has TWO interleaved strands half a turn apart (see spiralPoint's `phase`), so
+ * neighbouring arms at a given angle are `gap` apart — NOT 2*gap — which makes
+ * half of that the true midline. Measuring rendered fog brightness along this
+ * exact ray confirms it: density peaks at r≈97 and r≈182 (the two arms) with a
+ * void between, so the midpoint is ~139.5 and gap*0.5 lands at 138.9.
+ *
+ * Don't push this much past 0.5: at the 240px disc cap the creature's rim
+ * reaches r=120, and the badge already sits only ~6px clear of it.
  */
 const ADD_PERSON_T = 0.206
-const ADD_PERSON_GAP_FRAC = 0.61
+const ADD_PERSON_GAP_FRAC = 0.5
 
 function addPersonPoint() {
   const theta = ADD_PERSON_T * TURNS * Math.PI * 2 - Math.PI / 2
