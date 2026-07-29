@@ -24,24 +24,36 @@ export default async function SignUpPage() {
       <SwirlCloudSky />
       <AsciiRippleSky />
 
-      {/* Wordmark — this may be a visitor's first screen, so the app names
-          itself. Letters flicker into ascii glyphs and back, the same feel as
-          the loading screen's morphing display. */}
-      <Link
-        href="/"
-        className="absolute top-8 left-1/2 z-10 -translate-x-1/2 font-mono text-[10px] lowercase tracking-[0.25em] text-foreground"
-      >
-        <GlyphFlickerText text="spiral inward" />
-      </Link>
+      {/* Removing the visible heading left the page with no h1. Keeping one
+          for screen readers preserves the document outline without putting
+          copy back on screen. */}
+      <h1 className="sr-only">Create your spiral inward account</h1>
 
       {/* The button sits at the exact center of the page — which is the center
           of the full-screen spiral — so the animation breathes around it. The
-          heading is absolutely positioned above it rather than in flow, which
-          would push the button off that center. */}
-      <div className="relative z-10 flex w-full max-w-sm items-center justify-center">
-        <h1 className="absolute bottom-full left-1/2 mb-10 w-full -translate-x-1/2 text-center font-mono text-sm lowercase tracking-[0.15em] text-foreground text-balance">
-          before we start, an account
-        </h1>
+          wordmark is absolutely positioned above it rather than in flow, which
+          would push the button off that center.
+
+          `inline-flex` (not w-full/max-w-sm) makes this wrapper shrink to the
+          button's intrinsic width, so the wordmark's `w-full` below resolves to
+          exactly the button width. */}
+      <div className="relative z-10 inline-flex items-center justify-center">
+        {/* Wordmark — this may be a visitor's first screen, so the app names
+            itself. Letters flicker into ascii glyphs and back, the same feel as
+            the loading screen's morphing display. Now sits just above the
+            button and spans its width: `justify-between` spreads the
+            fixed-1ch cells across the line instead of a fixed tracking value,
+            so it lines up with the button edges at any text length. */}
+        <Link
+          href="/"
+          aria-label="spiral inward — home"
+          className="absolute bottom-full left-0 mb-5 w-full font-mono text-[10px] lowercase text-foreground"
+        >
+          <GlyphFlickerText
+            text="spiral inward"
+            className="flex w-full justify-between"
+          />
+        </Link>
 
         <AuthForm mode="sign-up" />
       </div>
