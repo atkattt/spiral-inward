@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { STORY_SECTIONS, type StorySection } from "@/components/threshold/story-content"
 
 /**
@@ -17,6 +17,8 @@ const MONO = '"Geist Pixel", sans-serif'
 const PIXEL = '"Geist Pixel", sans-serif'
 const TYPE_MS = 14
 const CHARS_PER_TICK = 2
+/** Beat between one card finishing and the next appearing. */
+const HANDOFF_MS = 460
 
 /**
  * `instant` renders every card fully typed out, with no animation and no
@@ -25,17 +27,129 @@ const CHARS_PER_TICK = 2
  * screen leaves it off, where the typing is part of the first-run moment.
  */
 export function StoryReadCards({ instant = false }: { instant?: boolean }) {
+  const total = STORY_SECTIONS.length
+  const wrapRef = useRef<HTMLDivElement>(null)
+
+  // Cards are now revealed as a SEQUENCE owned here rather than each card
+  // watching the viewport on its own: card n types, and only when it finishes
+  // does card n+1 appear and start. `doneCount` is how many have completed, so
+  // the card at index === doneCount is the one currently typing.
+  const [doneCount, setDoneCount] = useState(0)
+  // The sequence waits for the block to scroll into view, so the copy isn't
+  // already typed out by the time the user scrolls down to it.
+  const [started, setStarted] = useState(false)
+  // Read in an effect, not during render: using it to decide what to render
+  // would disagree with the server's HTML and break hydration.
+  const [reduceMotion, setReduceMotion] = useState(false)
+
+  useEffect(() => {
+    setReduceMotion(
+      typeof window !== "undefined" &&
+        !!window.matchMedia &&
+        window.matchMedia("(prefers-reduced-motion: reduce)").matches,
+    )
+  }, [])
+
+  const sequential = !instant && !reduceMotion
+
+  useEffect(() => {
+    if (!sequential) return
+    const el = wrapRef.current
+    if (!el) return
+    const io = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) {
+          setStarted(true)
+          io.disconnect()
+        }
+      },
+      { threshold: 0.1 },
+    )
+    io.observe(el)
+    return () => io.disconnect()
+  }, [sequential])
+
+  const advance = useCallback((index: number) => {
+    // Guard with max() so a late timer from an unmounted/replayed card can
+    // never walk the sequence backwards.
+    setDoneCount((c) => Math.max(c, index + 1))
+  }, [])
+
   return (
-    <div className="mt-8 flex flex-col gap-5">
-      {STORY_SECTIONS.map((section, i) => (
-        <StoryReadCard
-          key={section.title}
-          section={section}
-          index={i}
-          total={STORY_SECTIONS.length}
-          instant={instant}
-        />
-      ))}
+    <div ref={wrapRef} className="mt-8 flex flex-col gap-5">
+      {/* Loading line above the first card. It sweeps while the sequence is
+          running and settles to a plain hairline once every card is done. */}
+      {sequential && (
+        <LoadingLine active={started && doneCount < total} />
+      )}
+
+      {STORY_SECTIONS.map((section, i) => {
+        // Not yet this card's turn — keep it out of the flow entirely so it
+        // "appears" on cue instead of sitting there empty.
+        if (sequential && i > doneCount) return null
+        return (
+          <StoryReadCard
+            key={section.title}
+            section={section}
+            index={i}
+            instant={!sequential}
+            active={sequential ? started && i === doneCount : false}
+            appear={sequential && i > 0}
+            onDone={advance}
+          />
+        )
+      })}
+
+      <style>{`
+        @keyframes srcSweep {
+          from { transform: translateX(-110%); }
+          to { transform: translateX(320%); }
+        }
+        @keyframes srcCardIn {
+          from { opacity: 0; transform: translateY(8px); }
+          to { opacity: 1; transform: none; }
+        }
+      `}</style>
+    </div>
+  )
+}
+
+/**
+ * Thin indeterminate progress line. A bright segment travels across a hairline
+ * track while copy is still arriving; when the sequence completes the segment
+ * fades and only the quiet track is left, so the line resolves instead of
+ * animating forever.
+ */
+function LoadingLine({ active }: { active: boolean }) {
+  return (
+    <div
+      role="presentation"
+      style={{
+        position: "relative",
+        // 2px, not a hairline: this sits over the ascii starfield, where a 1px
+        // line at low opacity was measurably rendering but invisible on a phone.
+        height: 2,
+        width: "100%",
+        overflow: "hidden",
+        borderRadius: 2,
+        background: "rgba(255,255,255,0.22)",
+      }}
+    >
+      <div
+        style={{
+          position: "absolute",
+          top: 0,
+          left: 0,
+          height: "100%",
+          width: "34%",
+          background:
+            "linear-gradient(90deg, transparent, #ffffff, transparent)",
+          boxShadow: "0 0 10px rgba(255,255,255,0.65)",
+          animation: active ? "srcSweep 1.45s linear infinite" : "none",
+          opacity: active ? 1 : 0,
+          transition: "opacity .6s ease-out",
+        }}
+      />
     </div>
   )
 }
@@ -43,13 +157,20 @@ export function StoryReadCards({ instant = false }: { instant?: boolean }) {
 function StoryReadCard({
   section,
   index,
-  total,
   instant,
+  active,
+  appear,
+  onDone,
 }: {
   section: StorySection
   index: number
-  total: number
   instant: boolean
+  /** This card's turn: type now. */
+  active: boolean
+  /** Fade/rise in on arrival (every card except the first). */
+  appear: boolean
+  /** Called once the last character lands, handing the turn to the next card. */
+  onDone: (index: number) => void
 }) {
   const ref = useRef<HTMLDivElement>(null)
   const fullLen = useMemo(
@@ -59,49 +180,40 @@ function StoryReadCard({
   // Seeded full when instant, so the copy is in the very first render (and in
   // the server-rendered HTML) rather than being filled in after mount.
   const [count, setCount] = useState(instant ? fullLen : 0)
-  const [started, setStarted] = useState(false)
 
-  const reduceMotion =
-    typeof window !== "undefined" &&
-    window.matchMedia &&
-    window.matchMedia("(prefers-reduced-motion: reduce)").matches
-
-  // Begin typing when the card scrolls into view.
+  // Keeps the completion callback out of the typing effect's dependencies, so a
+  // new function identity from the parent can't restart the animation midway.
+  const doneRef = useRef(onDone)
   useEffect(() => {
-    if (instant || reduceMotion) {
-      setCount(fullLen)
-      return
-    }
-    const el = ref.current
-    if (!el) return
-    const io = new IntersectionObserver(
-      (entries) => {
-        if (entries[0]?.isIntersecting) {
-          setStarted(true)
-          io.disconnect()
-        }
-      },
-      { threshold: 0.35 },
-    )
-    io.observe(el)
-    return () => io.disconnect()
-  }, [fullLen, reduceMotion, instant])
+    doneRef.current = onDone
+  }, [onDone])
 
-  // Reveal characters once started.
   useEffect(() => {
-    if (!started) return
+    if (!instant) return
+    setCount(fullLen)
+  }, [instant, fullLen])
+
+  // Type out this card, then hand off to the next one.
+  useEffect(() => {
+    if (instant || !active) return
     let i = 0
     let timer: ReturnType<typeof setTimeout>
     const tick = () => {
       i = Math.min(fullLen, i + CHARS_PER_TICK)
       setCount(i)
-      if (i < fullLen) timer = setTimeout(tick, TYPE_MS)
+      if (i < fullLen) {
+        timer = setTimeout(tick, TYPE_MS)
+      } else {
+        // Small beat on the finished card before the next one slides in, so the
+        // sequence reads as deliberate rather than as one continuous scroll.
+        timer = setTimeout(() => doneRef.current(index), HANDOFF_MS)
+      }
     }
     timer = setTimeout(tick, 160)
     return () => clearTimeout(timer)
-  }, [started, fullLen])
+  }, [active, instant, fullLen, index])
 
-  const typing = count < fullLen
+  const typing = !instant && active && count < fullLen
 
   return (
     <div
@@ -118,6 +230,9 @@ function StoryReadCard({
           "0 16px 40px rgba(0,0,0,0.28), inset 0 1px 0 rgba(255,255,255,0.14)",
         padding: "16px 18px 18px",
         fontFamily: MONO,
+        // Only the cards after the first animate in; the first is already on
+        // screen when the sequence starts.
+        animation: appear ? "srcCardIn .5s cubic-bezier(.22,.61,.36,1) both" : undefined,
       }}
     >
       {/* meta line: section title (left), index counter (right) */}
