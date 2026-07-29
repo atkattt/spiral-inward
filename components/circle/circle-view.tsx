@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useCallback, useMemo, useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import type { Person } from "@/lib/db/schema"
@@ -22,7 +22,17 @@ import type { Mood } from "@/components/circle/SelfAvatar"
 import { buildColorMap } from "@/lib/circle/colors"
 import { useCircleData } from "@/components/circle/circle-data-provider"
 
-import { LogOut, Clock, Menu, X, Info, Star, User, Users } from "lucide-react"
+import {
+  LogOut,
+  ArrowLeft,
+  Clock,
+  Menu,
+  X,
+  Info,
+  Star,
+  User,
+  Users,
+} from "lucide-react"
 
 export function CircleView({
   userName,
@@ -57,6 +67,18 @@ export function CircleView({
   // Leave confirmation: signed-in users choose between erasing the journey
   // or just signing out (progress kept).
   const [leaveConfirm, setLeaveConfirm] = useState(false)
+  /**
+   * Set while a read is open, so the top-left control becomes "back to the
+   * circle" instead of the app-level exit. Null the rest of the time.
+   */
+  const [backToCircle, setBackToCircle] = useState<(() => void) | null>(null)
+  // Wrapped in an extra arrow on purpose: useState treats a bare function
+  // argument as an updater, so passing the action directly would CALL it and
+  // store its undefined return — closing the panel the instant it opened.
+  const handleBackChange = useCallback(
+    (fn: (() => void) | null) => setBackToCircle(() => fn),
+    [],
+  )
   const [erasing, setErasing] = useState(false)
   // The central avatar's resting expression. Per-read reactions (agree /
   // disagree / curious + color) are now driven inside SpiralUniverse itself
@@ -151,12 +173,28 @@ export function CircleView({
           White text; ALWAYS present — even while the camera is zoomed into
           a read, the user must be able to reach the menu and leave. */}
       <header className="relative z-30 flex items-center justify-between px-5 pt-6">
+        {/* One control, two meanings. While a read is open this is the way OUT
+            OF THE READ; only on the bare sky does it leave the app. Same slot
+            and same styling either way, so nothing shifts as it changes — but
+            the icon and label change with it, so it never silently does the
+            more destructive thing. */}
         <button
-          onClick={handleLeaveClick}
+          onClick={backToCircle ?? handleLeaveClick}
+          aria-label={
+            backToCircle
+              ? "Back to the circle"
+              : guest
+                ? "Exit"
+                : "Leave and erase your journey"
+          }
           className="flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-widest text-white transition-colors hover:text-white/80"
         >
-          <LogOut className="size-3.5" />
-          {guest ? "Exit" : "Leave"}
+          {backToCircle ? (
+            <ArrowLeft className="size-3.5" />
+          ) : (
+            <LogOut className="size-3.5" />
+          )}
+          {backToCircle ? "Back" : guest ? "Exit" : "Leave"}
         </button>
 
         {/* Entry points collapsed into a burger menu that drops down */}
@@ -248,6 +286,7 @@ export function CircleView({
           initialResponses={initialResponses}
           guestFragments={guestFragments}
           lensRanks={lensRanks}
+          onBackChange={handleBackChange}
         />
       </div>
 

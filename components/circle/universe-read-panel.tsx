@@ -8,7 +8,7 @@ import { useCallback, useEffect, useRef, useState } from "react"
  * A terminal-styled panel that slides up from the bottom when an object in the
  * SpiralUniverse is tapped. Mirrors the ReadHub voice: a small lowercase title,
  * a dim metadata line, the full body text (no typing animation — the whole
- * content fades in ~200ms), and [ ✓ yes ] / [ ✕ no ] commands. Closes on
+ * content fades in ~200ms), and [ ✓ yes ] / [ × no ] commands. Closes on
  * scrim tap or swipe-down.
  *
  * The yes/no handlers are wired by the parent to the SAME spiral agree/disagree
@@ -325,7 +325,9 @@ function AnsweredSummary({
         className="text-[12.5px] lowercase tracking-[1px]"
         style={{ color: c }}
       >
-        <span style={{ opacity: 0.5 }}>[</span> {yes ? "\u2713" : "\u2715"} you
+        {/* U+00D7, not U+2715: the pixel font has no glyph for the heavy
+            multiplication X and renders a tofu box instead. */}
+        <span style={{ opacity: 0.5 }}>[</span> {yes ? "\u2713" : "\u00D7"} you
         said {yes ? "yes" : "no"} <span style={{ opacity: 0.5 }}>]</span>
       </span>
       <button
@@ -378,7 +380,9 @@ function CmdButton({
           color: lit ? "#e88f9c" : "#b0606e",
           border: chosen ? "#b0606e" : lit ? "#8a3f4c" : "#3a1f24",
           bg: chosen ? "rgba(176,96,110,.22)" : lit ? "rgba(176,96,110,.1)" : "transparent",
-          glyph: "✕",
+          // U+00D7 rather than U+2715 — the pixel font ships no glyph for the
+          // heavy X, so the button was rendering a tofu box next to "no".
+          glyph: "\u00D7",
         }
   return (
     <button

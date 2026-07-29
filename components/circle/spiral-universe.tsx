@@ -395,6 +395,7 @@ export function SpiralUniverse({
   guest,
   initialRevealRadius = BASE_REVEAL_RADIUS,
   onHomeChange,
+  onBackChange,
   matchedReads,
   initialResponses,
   guestFragments,
@@ -414,6 +415,15 @@ export function SpiralUniverse({
   initialRevealRadius?: number
   /** notifies the parent when the camera leaves / returns to the home view */
   onHomeChange?: (home: boolean) => void
+  /**
+   * Hands the parent a "back to the circle" action while a read is open, and
+   * null once nothing is open. The header's top-left control owns the only
+   * exit-shaped affordance on the screen, so while a read is up it has to mean
+   * "leave this read" rather than "leave the app" — otherwise the natural tap
+   * lands on sign-out. The parent can't derive this itself: the panel state
+   * lives in here.
+   */
+  onBackChange?: (back: (() => void) | null) => void
   /** authed: matched fragments from the /self pipeline (weight desc) */
   matchedReads?: UniverseFragment[]
   /** authed: saved agree/disagree per fragment id from read_responses */
@@ -1402,6 +1412,28 @@ export function SpiralUniverse({
       camRef.current = { x: 0, y: 0, scale: 1 }
     }, 700)
   }, [animateCam])
+
+  /**
+   * "Back to the circle": dismiss the read AND return the camera to the home
+   * composition. Closing alone would leave the user still zoomed into the star
+   * they were just reading, which doesn't feel like going back.
+   */
+  const backToCircle = useCallback(() => {
+    closePanel()
+    goHome()
+  }, [closePanel, goHome])
+
+  // Publish/retract that action as the panel opens and closes. Declared after
+  // goHome so both halves of backToCircle exist by now; reuses the existing
+  // panelOpen flag above rather than deriving a second one.
+  const onBackChangeRef = useRef(onBackChange)
+  onBackChangeRef.current = onBackChange
+  useEffect(() => {
+    onBackChangeRef.current?.(panelOpen ? backToCircle : null)
+    // Retract on unmount so the parent can never keep a stale back action
+    // pointing at a panel that no longer exists.
+    return () => onBackChangeRef.current?.(null)
+  }, [panelOpen, backToCircle])
 
   // THE UNLOCK MOMENT — when the last read of a section is answered during
   // this session (unlockedCount rises past its mount value), the next star
