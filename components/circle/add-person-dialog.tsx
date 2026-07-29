@@ -16,6 +16,23 @@ import { toast } from "@/components/ui/terminal-toast"
 // ●/○ text toggles — no boxed form chrome.
 const PIXEL = '"Geist Pixel", sans-serif'
 
+// The house glass surface, value-for-value from the story cards and self view
+// (components/threshold/story-read-cards.tsx). Translucent grey rather than a
+// solid fill, so the sky stays faintly visible through the panel.
+//
+// NOTE: `background` must be the shorthand, not `backgroundColor` — the Dialog
+// primitive ships `bg-popover` as a class, and `--popover` is
+// oklch(0.19 0.025 275), a navy blue. The inline shorthand reliably wins.
+const glassPanelStyle: React.CSSProperties = {
+  border: "1px solid rgba(255,255,255,0.18)",
+  borderRadius: 13,
+  background: "rgba(120,120,120,0.30)",
+  backdropFilter: "blur(12px) saturate(120%)",
+  WebkitBackdropFilter: "blur(12px) saturate(120%)",
+  boxShadow:
+    "0 16px 40px rgba(0,0,0,0.28), inset 0 1px 0 rgba(255,255,255,0.14)",
+}
+
 const labelStyle: React.CSSProperties = {
   fontFamily: PIXEL,
   fontSize: 11,
@@ -26,7 +43,7 @@ const labelStyle: React.CSSProperties = {
 
 const fieldWrapStyle: React.CSSProperties = {
   borderBottom: "1px solid rgba(255, 255, 255, 0.55)",
-  padding: "9px 2px",
+  padding: "6px 2px",
 }
 
 const inputStyle: React.CSSProperties = {
@@ -175,20 +192,20 @@ export function AddPersonDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
-        className="max-w-sm"
-        style={{
-          // Dark grey panel — a step lighter than the pure-black sky so the
-          // dialog reads as its own surface floating above it.
-          backgroundColor: "#232323",
-          border: "1px solid rgba(255,255,255,0.16)",
-        }}
+        // Pulled in from the primitive's max-w-[calc(100%-2rem)] so the sky
+        // shows down both sides on mobile (~30px each at 360px wide) — the
+        // glass needs visible background behind it to read as glass at all.
+        // ring-0 drops the primitive's ring-1, which would otherwise sit a
+        // second hairline directly outside the glass border.
+        className="max-w-[300px] gap-3 p-4 ring-0 sm:max-w-xs"
+        style={glassPanelStyle}
         aria-describedby={undefined}
       >
         <DialogHeader>
           <DialogTitle
             style={{
               fontFamily: PIXEL,
-              fontSize: 18,
+              fontSize: 16,
               fontWeight: 500,
               letterSpacing: 1,
               color: "#fff",
@@ -198,7 +215,7 @@ export function AddPersonDialog({
           </DialogTitle>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="flex flex-col gap-5">
+        <form onSubmit={handleSubmit} className="flex flex-col gap-3.5">
           <div className="flex flex-col gap-1">
             <label htmlFor="p-name" style={labelStyle}>
               name
