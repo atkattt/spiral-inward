@@ -30,7 +30,9 @@ export default function AboutPage() {
           What this is, how it works
         </p>
 
-        <StoryReadCards />
+        {/* Fully rendered, no typing animation — this page is reference copy
+            someone opened on purpose. */}
+        <StoryReadCards instant />
       </div>
     </main>
   )

@@ -18,7 +18,13 @@ const PIXEL = '"Geist Pixel", sans-serif'
 const TYPE_MS = 14
 const CHARS_PER_TICK = 2
 
-export function StoryReadCards() {
+/**
+ * `instant` renders every card fully typed out, with no animation and no
+ * cursor. Used by /about, where the copy is reference material someone opened
+ * deliberately — waiting for it to type itself out is friction. The threshold
+ * screen leaves it off, where the typing is part of the first-run moment.
+ */
+export function StoryReadCards({ instant = false }: { instant?: boolean }) {
   return (
     <div className="mt-8 flex flex-col gap-5">
       {STORY_SECTIONS.map((section, i) => (
@@ -27,6 +33,7 @@ export function StoryReadCards() {
           section={section}
           index={i}
           total={STORY_SECTIONS.length}
+          instant={instant}
         />
       ))}
     </div>
@@ -37,17 +44,21 @@ function StoryReadCard({
   section,
   index,
   total,
+  instant,
 }: {
   section: StorySection
   index: number
   total: number
+  instant: boolean
 }) {
   const ref = useRef<HTMLDivElement>(null)
   const fullLen = useMemo(
     () => section.body.reduce((n, s) => n + s.text.length, 0),
     [section],
   )
-  const [count, setCount] = useState(0)
+  // Seeded full when instant, so the copy is in the very first render (and in
+  // the server-rendered HTML) rather than being filled in after mount.
+  const [count, setCount] = useState(instant ? fullLen : 0)
   const [started, setStarted] = useState(false)
 
   const reduceMotion =
@@ -57,7 +68,7 @@ function StoryReadCard({
 
   // Begin typing when the card scrolls into view.
   useEffect(() => {
-    if (reduceMotion) {
+    if (instant || reduceMotion) {
       setCount(fullLen)
       return
     }
@@ -74,7 +85,7 @@ function StoryReadCard({
     )
     io.observe(el)
     return () => io.disconnect()
-  }, [fullLen, reduceMotion])
+  }, [fullLen, reduceMotion, instant])
 
   // Reveal characters once started.
   useEffect(() => {
