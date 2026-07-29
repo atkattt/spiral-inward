@@ -9,29 +9,13 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { toast } from "@/components/ui/terminal-toast"
+import { GLASS_DIALOG_WIDTH, glassPanelStyle } from "@/lib/ui/glass"
 
 // The onboarding terminal's visual language, mirrored here so adding a
 // person feels like the same ritual as entering your own details:
 // Geist Pixel, transparent underline inputs, pill outline buttons,
 // ●/○ text toggles — no boxed form chrome.
 const PIXEL = '"Geist Pixel", sans-serif'
-
-// The house glass surface, value-for-value from the story cards and self view
-// (components/threshold/story-read-cards.tsx). Translucent grey rather than a
-// solid fill, so the sky stays faintly visible through the panel.
-//
-// NOTE: `background` must be the shorthand, not `backgroundColor` — the Dialog
-// primitive ships `bg-popover` as a class, and `--popover` is
-// oklch(0.19 0.025 275), a navy blue. The inline shorthand reliably wins.
-const glassPanelStyle: React.CSSProperties = {
-  border: "1px solid rgba(255,255,255,0.18)",
-  borderRadius: 13,
-  background: "rgba(120,120,120,0.30)",
-  backdropFilter: "blur(12px) saturate(120%)",
-  WebkitBackdropFilter: "blur(12px) saturate(120%)",
-  boxShadow:
-    "0 16px 40px rgba(0,0,0,0.28), inset 0 1px 0 rgba(255,255,255,0.14)",
-}
 
 const labelStyle: React.CSSProperties = {
   fontFamily: PIXEL,
@@ -192,12 +176,7 @@ export function AddPersonDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
-        // Pulled in from the primitive's max-w-[calc(100%-2rem)] so the sky
-        // shows down both sides on mobile (~30px each at 360px wide) — the
-        // glass needs visible background behind it to read as glass at all.
-        // ring-0 drops the primitive's ring-1, which would otherwise sit a
-        // second hairline directly outside the glass border.
-        className="max-w-[300px] gap-3 p-4 ring-0 sm:max-w-xs"
+        className={`${GLASS_DIALOG_WIDTH} gap-3 p-4 ring-0`}
         style={glassPanelStyle}
         aria-describedby={undefined}
       >

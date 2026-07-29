@@ -23,6 +23,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import { GLASS_DIALOG_WIDTH, glassPanelStyle } from "@/lib/ui/glass"
 import { milestoneLevel, type AvatarSignals } from "@/lib/self/avatar-slots"
 import { sectionClearProgress } from "@/lib/self/lenses"
 import { UniverseReadPanel, type PanelData } from "@/components/circle/universe-read-panel"
@@ -2351,17 +2352,14 @@ export function SpiralUniverse({
           than just refusing, and names exactly how much is left. */}
       <Dialog open={lockedNoticeOpen} onOpenChange={setLockedNoticeOpen}>
         <DialogContent
-          className="max-w-sm"
-          style={{
-            backgroundColor: "#232323",
-            border: "1px solid rgba(255,255,255,0.16)",
-          }}
+          className={`${GLASS_DIALOG_WIDTH} gap-3 p-4 ring-0`}
+          style={glassPanelStyle}
         >
           <DialogHeader>
             <DialogTitle
               style={{
                 fontFamily: monoFont,
-                fontSize: 18,
+                fontSize: 16,
                 fontWeight: 500,
                 letterSpacing: 1,
                 color: "#fff",
@@ -2387,8 +2385,7 @@ export function SpiralUniverse({
             type="button"
             onClick={() => setLockedNoticeOpen(false)}
             style={{
-              marginTop: 6,
-              alignSelf: "flex-start",
+              marginTop: 2,
               background: "transparent",
               border: "1px solid #fff",
               color: "#fff",
@@ -2396,7 +2393,7 @@ export function SpiralUniverse({
               fontSize: 11,
               letterSpacing: 2,
               textTransform: "uppercase",
-              padding: "11px 20px",
+              padding: "10px 18px",
               borderRadius: 30,
               cursor: "pointer",
             }}
