@@ -45,13 +45,17 @@ type Step = {
   say: string[];
   field?: Field;
   final?: boolean;
+  /** Reveal by scrambling through glyphs instead of typing, and stage the
+   *  field/button in after it settles. Used for the opening line so the screen
+   *  boots up rather than starting mid-sentence. */
+  scramble?: boolean;
 };
 
 const STEPS: Step[] = [
-  { say: ["a shape was set the moment you arrived...", "let's find it. "] },
   {
     say: ["when did you arrive?"],
     field: { type: "date", placeholder: "MM / DD / YYYY", key: "date" },
+    scramble: true,
   },
   {
     say: ["the hour matters more than you'd think."],
@@ -74,6 +78,21 @@ const TYPE_MS = 26; // per character
 const DOT_PAUSE = 90; // extra pause after a period
 const LINE_PAUSE = 420; // beat between lines
 const START_DELAY = 120;
+
+// Glyph-scramble reveal (opening line only).
+// ASCII only, deliberately: the card is set in "Geist Pixel", which has no
+// block/geometric glyphs (▓ ◆ ✳ ≡ …) — those rendered as tofu boxes. These all
+// exist in the face and read as a terminal booting rather than as missing font.
+const SCRAMBLE_GLYPHS =
+  "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789#%&*+=<>/\\|?!~^:;-_";
+const SCRAMBLE_FRAME_MS = 45; // glyph churn rate
+const SCRAMBLE_LEAD_MS = 260; // all-glyph "loading" beat before letters land
+const SCRAMBLE_SETTLE_MS = 620; // spread over which characters resolve L→R
+const FIELD_REVEAL_MS = 240; // beat after the line settles, before the field
+const BUTTON_REVEAL_MS = 260; // beat after the field, before the button
+
+const randGlyph = () =>
+  SCRAMBLE_GLYPHS[Math.floor(Math.random() * SCRAMBLE_GLYPHS.length)];
 
 // auto-insert separators as digits are typed
 function formatDate(raw: string): string {
@@ -116,6 +135,12 @@ export default function TerminalOnboarding({
   const [lines, setLines] = useState<LogLine[]>([]);
   const [typing, setTyping] = useState<string>(""); // currently-typing partial line
   const [showField, setShowField] = useState(false);
+  // The submit button is staged in AFTER the field so the opening screen
+  // assembles in order: line → date field → button.
+  const [showButton, setShowButton] = useState(false);
+  // Suppresses the typing caret while glyphs are churning — a blinking cursor
+  // next to scrambling glyphs reads as two competing animations.
+  const [scrambling, setScrambling] = useState(false);
   const [activeField, setActiveField] = useState<Field | null>(null);
   const [value, setValue] = useState("");
   const [timeUnknown, setTimeUnknown] = useState(false);
@@ -184,12 +209,65 @@ export default function TerminalOnboarding({
     [reduceMotion]
   );
 
+  /**
+   * Reveal a line by churning every character through random glyphs, then
+   * settling them left-to-right into the real text.
+   *
+   * Spaces are never scrambled, so the line holds its final width and word
+   * shape from the first frame — the block of glyphs visibly IS the sentence
+   * loading in, rather than a bar of noise that resizes as it resolves.
+   */
+  const scrambleLine = useCallback(
+    async (text: string, runId: number) => {
+      if (runId !== runIdRef.current) return;
+      if (reduceMotion) {
+        setLines((l) => [...l, { text, cls: "sys" }]);
+        scrollDown();
+        return;
+      }
+      const chars = [...text];
+      // Each character's settle time, staggered across SCRAMBLE_SETTLE_MS.
+      const settleAt = chars.map(
+        (_, i) =>
+          SCRAMBLE_LEAD_MS +
+          (chars.length <= 1 ? 0 : (i / (chars.length - 1)) * SCRAMBLE_SETTLE_MS),
+      );
+      const total = SCRAMBLE_LEAD_MS + SCRAMBLE_SETTLE_MS;
+      setScrambling(true);
+      const start = Date.now();
+      for (;;) {
+        if (runId !== runIdRef.current) {
+          setScrambling(false);
+          return;
+        }
+        const elapsed = Date.now() - start;
+        setTyping(
+          chars
+            .map((c, i) =>
+              c === " " ? " " : elapsed >= settleAt[i] ? c : randGlyph(),
+            )
+            .join(""),
+        );
+        scrollDown();
+        if (elapsed >= total) break;
+        // eslint-disable-next-line no-await-in-loop
+        await wait(SCRAMBLE_FRAME_MS);
+      }
+      setScrambling(false);
+      setTyping("");
+      setLines((l) => [...l, { text, cls: "sys" }]);
+      scrollDown();
+    },
+    [reduceMotion],
+  );
+
   const runStep = useCallback(
     async (runId: number) => {
       if (runId !== runIdRef.current) return;
       const s = STEPS[stepRef.current];
       if (!s) return;
       setShowField(false);
+      setShowButton(false);
       setActiveField(null);
       setValue("");
       setTimeUnknown(false);
@@ -197,7 +275,7 @@ export default function TerminalOnboarding({
 
       for (const line of s.say) {
         // eslint-disable-next-line no-await-in-loop
-        await typeLine(line, runId);
+        await (s.scramble ? scrambleLine(line, runId) : typeLine(line, runId));
         if (runId !== runIdRef.current) return;
         // eslint-disable-next-line no-await-in-loop
         await wait(LINE_PAUSE);
@@ -209,8 +287,23 @@ export default function TerminalOnboarding({
         return;
       }
       if (s.field) {
+        if (s.scramble) {
+          // Assemble in order: the settled line, then the field, then the
+          // button. Focus is deferred to the button beat so the mobile keyboard
+          // doesn't slide up over the screen mid-reveal.
+          await wait(FIELD_REVEAL_MS);
+          if (runId !== runIdRef.current) return;
+          setActiveField(s.field);
+          setShowField(true);
+          await wait(BUTTON_REVEAL_MS);
+          if (runId !== runIdRef.current) return;
+          setShowButton(true);
+          setTimeout(() => inputRef.current?.focus(), 80);
+          return;
+        }
         setActiveField(s.field);
         setShowField(true);
+        setShowButton(true);
         setTimeout(() => inputRef.current?.focus(), 80);
         return;
       }
@@ -221,7 +314,7 @@ export default function TerminalOnboarding({
       stepRef.current += 1;
       runStep(runId);
     },
-    [typeLine]
+    [typeLine, scrambleLine]
   );
 
   useEffect(() => {
@@ -289,6 +382,7 @@ export default function TerminalOnboarding({
         answers.current.place = auto.label;
         answers.current.placePick = auto;
         setShowField(false);
+        setShowButton(false);
         setActiveField(null);
         setLines((l) => [...l, { text: auto.label, cls: "me" }]);
         setValue("");
@@ -316,6 +410,7 @@ export default function TerminalOnboarding({
 
     // echo the user's answer back, brighter
     setShowField(false);
+    setShowButton(false);
     setActiveField(null);
     setLines((l) => [...l, { text: val, cls: "me" }]);
     setValue("");
@@ -418,24 +513,28 @@ export default function TerminalOnboarding({
               }}
             >
               {typing}
-              <span
-                style={{
-                  display: "inline-block",
-                  width: 10,
-                  height: 19,
-                  background: "#fff",
-                  marginLeft: 2,
-                  verticalAlign: -3,
-                  animation: "siBlink 1.05s steps(1) infinite",
-                }}
-              />
+              {!scrambling && (
+                <span
+                  style={{
+                    display: "inline-block",
+                    width: 10,
+                    height: 19,
+                    background: "#fff",
+                    marginLeft: 2,
+                    verticalAlign: -3,
+                    animation: "siBlink 1.05s steps(1) infinite",
+                  }}
+                />
+              )}
             </div>
           )}
         </div>
 
         {/* answer zone */}
         {showField && activeField && (
-          <div style={{ marginTop: 6 }}>
+          <div
+            style={{ marginTop: 6, animation: "siRise .34s ease-out both" }}
+          >
             {(() => {
               const isMasked =
                 activeField.type === "date" || activeField.type === "time";
@@ -634,24 +733,27 @@ export default function TerminalOnboarding({
                 {(timeUnknown ? "● " : "○ ") + activeField.toggle}
               </div>
             )}
-            <button
-              onClick={submit}
-              style={{
-                marginTop: 14,
-                background: "transparent",
-                border: "1px solid #fff",
-                color: "#fff",
-                fontFamily: '"Geist Pixel", sans-serif',
-                fontSize: 11,
-                letterSpacing: 2,
-                textTransform: "uppercase",
-                padding: "11px 20px",
-                borderRadius: 30,
-                cursor: "pointer",
-              }}
-            >
-              enter ⏎
-            </button>
+            {showButton && (
+              <button
+                onClick={submit}
+                style={{
+                  marginTop: 14,
+                  background: "transparent",
+                  border: "1px solid #fff",
+                  color: "#fff",
+                  fontFamily: '"Geist Pixel", sans-serif',
+                  fontSize: 11,
+                  letterSpacing: 2,
+                  textTransform: "uppercase",
+                  padding: "11px 20px",
+                  borderRadius: 30,
+                  cursor: "pointer",
+                  animation: "siRise .34s ease-out both",
+                }}
+              >
+                enter ⏎
+              </button>
+            )}
           </div>
         )}
 
@@ -679,7 +781,16 @@ export default function TerminalOnboarding({
         )}
       </div>
 
-      <style>{`@keyframes siBlink { 50% { opacity: 0; } }`}</style>
+      <style>{`
+        @keyframes siBlink { 50% { opacity: 0; } }
+        @keyframes siRise {
+          from { opacity: 0; transform: translateY(6px); }
+          to { opacity: 1; transform: none; }
+        }
+        @media (prefers-reduced-motion: reduce) {
+          @keyframes siRise { from { opacity: 1; } to { opacity: 1; } }
+        }
+      `}</style>
     </div>
   );
 }
