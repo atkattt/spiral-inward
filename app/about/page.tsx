@@ -1,6 +1,7 @@
 import Link from "next/link"
 import { ArrowLeft } from "lucide-react"
-import { Starfield } from "@/components/starfield"
+import SwirlCloudSky from "@/components/SwirlCloudSky"
+import AsciiRippleSky from "@/components/AsciiRippleSky"
 import { StoryReadCards } from "@/components/threshold/story-read-cards"
 import { GlyphFlickerText } from "@/components/glyph-flicker-text"
 
@@ -13,12 +14,27 @@ export const metadata = {
 export default function AboutPage() {
   return (
     <main className="relative min-h-[100dvh] overflow-y-auto bg-background">
-      {/* Denser than the default here because this page's glass cards cover
-          most of the column: backdrop-filter can only redistribute light that
-          already exists behind it, and at 70 stars there were only two or three
-          single pixels back there, so the blur had nothing to refract and the
-          cards composited to flat grey. */}
-      <Starfield count={190} />
+      {/* The /threshold backdrop, layer-for-layer, because this page shows the
+          same story cards and they should read the same. It also fixes them
+          properly: a glass card can only refract light that already exists
+          behind it, and the flat starfield this replaces gave the blur almost
+          nothing to work with. The living sky does.
+
+          Faint blueprint grid first, beneath both sky layers. */}
+      <div
+        aria-hidden="true"
+        className="pointer-events-none fixed inset-0 z-0"
+        style={{
+          backgroundImage:
+            "linear-gradient(to right, rgba(255,255,255,0.03) 1px, transparent 1px), linear-gradient(to bottom, rgba(255,255,255,0.03) 1px, transparent 1px)",
+          backgroundSize: "48px 48px",
+        }}
+      />
+
+      {/* Clouds (z-0) behind the ASCII ripple (z-1), sharing one wave field.
+          Both are `fixed inset-0`, so they stay put while the story scrolls. */}
+      <SwirlCloudSky />
+      <AsciiRippleSky />
 
       {/* Header: a quiet way back to the spiral */}
       <header className="relative z-20 flex items-center px-5 pt-6">
