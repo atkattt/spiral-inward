@@ -245,6 +245,7 @@ export function CircleView({
               />
               <div
                 role="menu"
+                aria-label="Menu"
                 className="absolute right-0 top-full z-10 mt-3 flex w-56 flex-col overflow-hidden rounded-lg shadow-xl"
                 style={{
                   backgroundColor: "#070707",
@@ -253,11 +254,11 @@ export function CircleView({
                     "'Geist Pixel', ui-monospace, monospace",
                 }}
               >
-                {/* Terminal meta line, mirroring the read cards' header */}
-                <div className="px-3 pb-2 pt-2.5 text-[9px] uppercase tracking-[0.3em] text-white/45">
-                  Menu
-                </div>
+                {/* No "Menu" heading here: the trigger directly above already
+                    says MENU, so repeating it just pushed the real entries
+                    down. The panel is labelled for screen readers instead. */}
                 <MenuItem
+                  first
                   icon={<Star className="size-4" />}
                   label="Self"
                   href="/self"
@@ -419,6 +420,7 @@ function MenuItem({
   onNavigate,
   locked,
   lockNote,
+  first,
 }: {
   icon: React.ReactNode
   label: string
@@ -429,6 +431,11 @@ function MenuItem({
   locked?: boolean
   /** Why it's closed — announced to screen readers, shown under the label. */
   lockNote?: string
+  /**
+   * Top row: drops the divider, which would otherwise sit directly on the
+   * panel's own top border and read as a doubled hairline.
+   */
+  first?: boolean
 }) {
   // White label + icon: at text-muted-foreground these read as dim beige
   // against the near-black panel, closer to disabled than to the app's
@@ -438,7 +445,7 @@ function MenuItem({
   const className = locked
     ? `${base} cursor-not-allowed text-white/35`
     : `${base} text-white hover:bg-white/[0.06]`
-  const style = { borderTop: "1px solid #1a1a1a" }
+  const style = first ? undefined : { borderTop: "1px solid #1a1a1a" }
 
   const inner = (
     <>
