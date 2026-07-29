@@ -85,9 +85,10 @@ const START_DELAY = 120;
 // exist in the face and read as a terminal booting rather than as missing font.
 const SCRAMBLE_GLYPHS =
   "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789#%&*+=<>/\\|?!~^:;-_";
-const SCRAMBLE_FRAME_MS = 45; // glyph churn rate
-const SCRAMBLE_LEAD_MS = 260; // all-glyph "loading" beat before letters land
-const SCRAMBLE_SETTLE_MS = 620; // spread over which characters resolve L→R
+const SCRAMBLE_FRAME_MS = 45; // glyph churn rate (unchanged — the churn should
+// stay lively; slowing the frame rate would make it look sluggish rather than longer)
+const SCRAMBLE_LEAD_MS = 620; // all-glyph "loading" beat before letters land
+const SCRAMBLE_SETTLE_MS = 1450; // spread over which characters resolve L→R
 const FIELD_REVEAL_MS = 240; // beat after the line settles, before the field
 const BUTTON_REVEAL_MS = 260; // beat after the field, before the button
 
