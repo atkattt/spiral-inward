@@ -26,7 +26,15 @@ const HANDOFF_MS = 460
  * deliberately — waiting for it to type itself out is friction. The threshold
  * screen leaves it off, where the typing is part of the first-run moment.
  */
-export function StoryReadCards({ instant = false }: { instant?: boolean }) {
+export function StoryReadCards({
+  instant = false,
+  onAllDone,
+}: {
+  instant?: boolean
+  /** Fires once every card has finished typing. The threshold screen uses this
+   *  to stop the circle's loading sweep and reveal the CTA. */
+  onAllDone?: () => void
+}) {
   const total = STORY_SECTIONS.length
   const wrapRef = useRef<HTMLDivElement>(null)
 
@@ -75,14 +83,22 @@ export function StoryReadCards({ instant = false }: { instant?: boolean }) {
     setDoneCount((c) => Math.max(c, index + 1))
   }, [])
 
+  // Held in a ref so a changing parent callback identity can't re-fire this.
+  const allDoneRef = useRef(onAllDone)
+  useEffect(() => {
+    allDoneRef.current = onAllDone
+  }, [onAllDone])
+
+  // Signal completion. When not sequential (instant / reduced motion) there is
+  // no typing to wait for, so everything is already "done" immediately —
+  // otherwise the CTA would never appear for those users.
+  const complete = !sequential || doneCount >= total
+  useEffect(() => {
+    if (complete) allDoneRef.current?.()
+  }, [complete])
+
   return (
     <div ref={wrapRef} className="mt-8 flex flex-col gap-5">
-      {/* Loading line above the first card. It sweeps while the sequence is
-          running and settles to a plain hairline once every card is done. */}
-      {sequential && (
-        <LoadingLine active={started && doneCount < total} />
-      )}
-
       {STORY_SECTIONS.map((section, i) => {
         // Not yet this card's turn — keep it out of the flow entirely so it
         // "appears" on cue instead of sitting there empty.
@@ -101,55 +117,11 @@ export function StoryReadCards({ instant = false }: { instant?: boolean }) {
       })}
 
       <style>{`
-        @keyframes srcSweep {
-          from { transform: translateX(-110%); }
-          to { transform: translateX(320%); }
-        }
         @keyframes srcCardIn {
           from { opacity: 0; transform: translateY(8px); }
           to { opacity: 1; transform: none; }
         }
       `}</style>
-    </div>
-  )
-}
-
-/**
- * Thin indeterminate progress line. A bright segment travels across a hairline
- * track while copy is still arriving; when the sequence completes the segment
- * fades and only the quiet track is left, so the line resolves instead of
- * animating forever.
- */
-function LoadingLine({ active }: { active: boolean }) {
-  return (
-    <div
-      role="presentation"
-      style={{
-        position: "relative",
-        // 2px, not a hairline: this sits over the ascii starfield, where a 1px
-        // line at low opacity was measurably rendering but invisible on a phone.
-        height: 2,
-        width: "100%",
-        overflow: "hidden",
-        borderRadius: 2,
-        background: "rgba(255,255,255,0.22)",
-      }}
-    >
-      <div
-        style={{
-          position: "absolute",
-          top: 0,
-          left: 0,
-          height: "100%",
-          width: "34%",
-          background:
-            "linear-gradient(90deg, transparent, #ffffff, transparent)",
-          boxShadow: "0 0 10px rgba(255,255,255,0.65)",
-          animation: active ? "srcSweep 1.45s linear infinite" : "none",
-          opacity: active ? 1 : 0,
-          transition: "opacity .6s ease-out",
-        }}
-      />
     </div>
   )
 }

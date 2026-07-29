@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 import SwirlCloudSky from "@/components/SwirlCloudSky"
 import AsciiRippleSky from "@/components/AsciiRippleSky"
 import { StoryReadCards } from "@/components/threshold/story-read-cards"
@@ -155,6 +155,10 @@ function AsciiMorphDisplay({ ready }: { ready: boolean }) {
 export default function ThresholdScreen({ onEnter }: { onEnter: () => void }) {
   const [stage, setStage] = useState(0)
   const [ready, setReady] = useState(false)
+  // True once every story card has finished typing. Drives both the circle's
+  // loading sweep (which stops) and the CTA (which appears).
+  const [storyDone, setStoryDone] = useState(false)
+  const handleStoryDone = useCallback(() => setStoryDone(true), [])
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
@@ -305,10 +309,26 @@ export default function ThresholdScreen({ onEnter }: { onEnter: () => void }) {
               0%, 38%, 62%, 100% { opacity: 0; filter: blur(2px); }
               42%, 58% { opacity: 1; filter: blur(0); }
             }
+            /* The circle's outline IS the loading line: a bright arc travels
+               around the ring while the story types itself out, then fades,
+               leaving the plain outline behind. Uses an animated custom
+               property so the conic gradient can actually rotate — animating
+               "transform: rotate()" on the ring would also spin the mask, which
+               produces no visible motion. */
+            @property --thrSpin {
+              syntax: '<angle>';
+              inherits: false;
+              initial-value: 0deg;
+            }
+            @keyframes thresholdRingSpin {
+              from { --thrSpin: 0deg; }
+              to { --thrSpin: 360deg; }
+            }
             @media (prefers-reduced-motion: reduce) {
               @keyframes thresholdAvatarHalo { 0%, 100% { box-shadow: 0 0 20px oklch(0.95 0 0 / 0.14); } }
               .ready-ascii { display: none; }
               .ready-letter { animation: none !important; }
+              .threshold-ring { animation: none !important; opacity: 0 !important; }
             }
           `}</style>
           <div
@@ -324,6 +344,28 @@ export default function ThresholdScreen({ onEnter }: { onEnter: () => void }) {
             }}
             aria-hidden={ready ? undefined : "true"}
           >
+            {/* Travelling glow on the outline itself. Sits exactly over the 2px
+                border (inset -2px) and is masked to a 2px-thick ring, so it
+                reads as the border lighting up rather than as a separate circle.
+                pointer-events:none keeps it off the interaction path. */}
+            <div
+              aria-hidden="true"
+              className="threshold-ring pointer-events-none absolute rounded-full"
+              style={{
+                inset: -2,
+                background:
+                  "conic-gradient(from var(--thrSpin), transparent 0deg, transparent 250deg, oklch(0.98 0 0 / 0.55) 322deg, #ffffff 352deg, oklch(0.98 0 0 / 0.55) 358deg, transparent 360deg)",
+                // Ring-only: punch out everything but a 2px band at the edge.
+                WebkitMask:
+                  "radial-gradient(farthest-side, transparent calc(100% - 2px), #000 calc(100% - 2px))",
+                mask: "radial-gradient(farthest-side, transparent calc(100% - 2px), #000 calc(100% - 2px))",
+                animation: "thresholdRingSpin 2.1s linear infinite",
+                opacity: storyDone ? 0 : 1,
+                transition: "opacity .8s ease-out",
+                filter: "drop-shadow(0 0 6px oklch(0.98 0 0 / 0.85))",
+              }}
+            />
+
             {/* One continuous ASCII line: mutates while the chart reads, then
                 resolves cell-by-cell into "READY?" — no remount, no jump. */}
             <AsciiMorphDisplay ready={ready && !error} />
@@ -368,12 +410,14 @@ export default function ThresholdScreen({ onEnter }: { onEnter: () => void }) {
 
       {/* Scrollable story body */}
       <div className="relative z-10 mx-auto max-w-md px-7 pb-44">
-        <StoryReadCards />
+        <StoryReadCards onAllDone={handleStoryDone} />
       </div>
 
-      {/* The handoff CTA — fixed at the bottom, fades/rises in only when the
-          read finishes. It waits; it never forces the transition. */}
-      {ready && (
+      {/* The handoff CTA — fixed at the bottom, fades/rises in only once the
+          read has finished AND every story card has typed itself out, so it
+          never competes with the copy still arriving. It waits; it never forces
+          the transition. */}
+      {ready && storyDone && (
         <>
           {/* Frosted glass shelf — kept in its OWN fixed element, OUTSIDE the
               animated CTA wrapper below. The rise-in animation applies a
