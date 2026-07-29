@@ -40,7 +40,7 @@ export default function AboutPage() {
       <header className="relative z-20 flex items-center px-5 pt-6">
         <Link
           href="/circle"
-          className="flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-widest text-muted-foreground transition-colors hover:text-foreground"
+          className="flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-widest text-foreground transition-opacity hover:opacity-70"
         >
           <ArrowLeft className="size-3.5" />
           Back
