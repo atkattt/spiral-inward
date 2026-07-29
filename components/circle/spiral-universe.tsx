@@ -15,6 +15,14 @@ import type { Person, Relationship } from "@/lib/db/schema"
 import { useSpiral } from "@/components/spiral/spiral-provider"
 import { makePersonRead, type Read } from "@/lib/spiral/reads"
 import { SELF_PERSON_ID } from "@/lib/relationships"
+import { AddPersonDialog } from "@/components/circle/add-person-dialog"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import { milestoneLevel, type AvatarSignals } from "@/lib/self/avatar-slots"
 import { sectionClearProgress } from "@/lib/self/lenses"
 import { UniverseReadPanel, type PanelData } from "@/components/circle/universe-read-panel"
@@ -338,6 +346,59 @@ function personPoint(i: number, n: number) {
   const rnd = mulberry32(0xbeef + i * 7919)
   const r = MAX_R * t + gap * (0.42 + rnd() * 0.16)
   return { x: r * Math.cos(theta), y: r * Math.sin(theta) }
+}
+
+/**
+ * The ADD-PERSON invitation glyph — an empty slot in the sky where the first
+ * bond would go, sitting down-left of the creature (matching the design).
+ *
+ * It gets its OWN spot rather than borrowing personPoint(): that function
+ * spreads real people from due-north outward, so the "add" slot would jump
+ * around as people are added, and at n=1 would land exactly where the first
+ * real person is about to appear. A fixed anchor keeps the invitation in one
+ * learnable place for the life of the account.
+ *
+ * Derived the same way people are (angle from t, radius pushed into the dark
+ * pocket between strands) so it belongs to the same visual system: at
+ * t = 0.206 the spiral angle is ~132° — down and to the left — and the radial
+ * push puts it ~148 world units out, clear of the widest creature disc.
+ */
+const ADD_PERSON_T = 0.206
+const ADD_PERSON_GAP_FRAC = 0.61
+
+function addPersonPoint() {
+  const theta = ADD_PERSON_T * TURNS * Math.PI * 2 - Math.PI / 2
+  const gap = MAX_R / (TURNS * 2)
+  const r = MAX_R * ADD_PERSON_T + gap * ADD_PERSON_GAP_FRAC
+  return { x: r * Math.cos(theta), y: r * Math.sin(theta) }
+}
+
+/** How many sections (major + ALL its minis) must be complete to open bonds. */
+const BONDS_UNLOCK_SECTIONS = 3
+
+/**
+ * The ⊕ badge that marks the silhouette as an invitation rather than a person.
+ * Rides the lower-left of the bust, like a system "add" affordance.
+ */
+function AddBadgeIcon({ size, glow }: { size: number; glow?: string }) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      aria-hidden="true"
+      style={{ display: "block", filter: glow || undefined }}
+    >
+      {/* Filled disc so the plus reads against whatever sits behind it. */}
+      <circle cx="12" cy="12" r="11" fill="currentColor" />
+      <path
+        d="M12 6.6v10.8M6.6 12h10.8"
+        stroke="#050505"
+        strokeWidth="3"
+        strokeLinecap="round"
+      />
+    </svg>
+  )
 }
 
 // Fallback palette for people (used only when colorById has no entry), kept
@@ -741,6 +802,35 @@ export function SpiralUniverse({
     [sections, respondedIds],
   )
 
+  /**
+   * BONDS PROGRESSION — how many sections are COMPLETE (major + all minis).
+   * fullyAnswered already encodes exactly that rule, so this is just a count;
+   * it deliberately does NOT use unlockedCount, which advances to the next
+   * section and would read one ahead of what's actually finished.
+   */
+  const completedSections = useMemo(
+    () => fullyAnswered.filter(Boolean).length,
+    [fullyAnswered],
+  )
+  // The invitation appears once the FIRST section is complete — the sky has
+  // learned something about you, so it can hint at bonds — but stays dim until
+  // three are done, because a bond read needs that much of your chart to say
+  // anything true about you and someone else.
+  //
+  // Clamped to the number of sections that actually EXIST: a sparse chart can
+  // yield fewer than three sections, and an unclamped threshold would leave
+  // such a user staring at a permanently dimmed invitation with no way to
+  // reach it. Finishing everything the sky has must always be enough.
+  const bondsThreshold = Math.min(
+    BONDS_UNLOCK_SECTIONS,
+    Math.max(1, sections.length),
+  )
+  const sectionsRemaining = Math.max(0, bondsThreshold - completedSections)
+  const addPersonVisible = completedSections >= 1
+  const addPersonUnlocked = sectionsRemaining === 0
+  const [addOpen, setAddOpen] = useState(false)
+  const [lockedNoticeOpen, setLockedNoticeOpen] = useState(false)
+
   // Progressive appearance: section 1 is present from first arrival; the NEXT
   // section's star appears ONLY when the current section is FULLY answered —
   // its major and ALL of its minis. Partial completion never advances.
@@ -1068,8 +1158,11 @@ export function SpiralUniverse({
     const pts = reads.map((r) => ({ x: r.x, y: r.y }))
     const n = people.length
     for (let i = 0; i < n; i++) pts.push(personPoint(i, n))
+    // The add-person invitation gets the same clean disc as any other marker,
+    // so fog glyphs never sit behind the silhouette.
+    if (addPersonVisible) pts.push(addPersonPoint())
     return pts
-  }, [reads, people.length])
+  }, [reads, people.length, addPersonVisible])
 
   // The nebula: a dense field of ASCII glyphs scattered along AND across the
   // spiral arm, forming cloudy limbs with organic clumping (density noise)
@@ -1792,6 +1885,88 @@ export function SpiralUniverse({
           )
         })}
 
+        {/* ===== ADD-PERSON INVITATION =====
+            An empty slot in the sky where your first bond would go. Appears
+            once one section is complete, DIM until three are, then lights up
+            and opens the add dialog in place.
+
+            Lives in the world layer (not the HUD) on purpose: it's a place in
+            the universe, so it pans and zooms with the sky exactly like the
+            people it's inviting. */}
+        {addPersonVisible &&
+          (() => {
+            const { x, y } = addPersonPoint()
+            // Dim state borrows the locked-marker treatment used for reads
+            // (#4a4e56, no glow) so "not yet" looks the same everywhere.
+            const tint = addPersonUnlocked ? "#cfd6e0" : "#4a4e56"
+            return (
+              <div
+                className="group absolute flex flex-col items-center"
+                style={{
+                  left: px2(x),
+                  top: px2(y),
+                  transform: "translate(-50%, -50%)",
+                  // Dim but NOT pointer-blocked while locked — tapping is how
+                  // the user learns what opens it.
+                  opacity: addPersonUnlocked ? 1 : 0.42,
+                  transition: "opacity 1s ease, filter 1s ease",
+                }}
+              >
+                <button
+                  type="button"
+                  aria-label={
+                    addPersonUnlocked
+                      ? "Add a person to your circle"
+                      : `Bonds locked — complete ${sectionsRemaining} more read${
+                          sectionsRemaining === 1 ? "" : "s"
+                        } to add a person`
+                  }
+                  onClick={() =>
+                    addPersonUnlocked
+                      ? setAddOpen(true)
+                      : setLockedNoticeOpen(true)
+                  }
+                  className="relative flex cursor-pointer items-center justify-center rounded-full leading-none transition-[filter] duration-150 group-hover:brightness-150"
+                  style={{
+                    // Same 21px footprint as a person/major star, so the empty
+                    // slot reads as the same class of object it will become.
+                    width: 21,
+                    height: 21,
+                    backgroundColor: "#050505",
+                    border: `1.5px solid ${tint}`,
+                    color: tint,
+                    boxShadow: addPersonUnlocked
+                      ? `0 0 10px ${tint}, 0 0 20px ${tint}66`
+                      : "none",
+                  }}
+                >
+                  <AvatarIcon
+                    size={12}
+                    glow={
+                      addPersonUnlocked
+                        ? toDropShadow(`0 0 8px ${tint}, 0 0 18px ${tint}`)
+                        : undefined
+                    }
+                  />
+                  {/* ⊕ badge, offset to the lower-left of the bust. Absolute so
+                      it overlaps the ring rather than displacing the silhouette
+                      inside it. */}
+                  <span
+                    className="pointer-events-none absolute"
+                    style={{
+                      left: -6,
+                      bottom: -3,
+                      color: tint,
+                      lineHeight: 0,
+                    }}
+                  >
+                    <AddBadgeIcon size={11} />
+                  </span>
+                </button>
+              </div>
+            )
+          })()}
+
         {/* PEOPLE — placed on the spiral arm, each in their own color. Tap to
             open the bond read. */}
         {placedPeople.map((pp, i) => {
@@ -2157,6 +2332,70 @@ export function SpiralUniverse({
           ) : null
         }
       />
+
+      {/* The add flow, opened straight from the sky so you never leave the
+          circle. Reuses the same dialog the bonds page uses. */}
+      <AddPersonDialog open={addOpen} onOpenChange={setAddOpen} />
+
+      {/* Why bonds aren't open yet — shown when the dimmed invitation is
+          tapped. Explains the reason (the sky needs to know you first) rather
+          than just refusing, and names exactly how much is left. */}
+      <Dialog open={lockedNoticeOpen} onOpenChange={setLockedNoticeOpen}>
+        <DialogContent
+          className="max-w-sm"
+          style={{
+            backgroundColor: "#232323",
+            border: "1px solid rgba(255,255,255,0.16)",
+          }}
+        >
+          <DialogHeader>
+            <DialogTitle
+              style={{
+                fontFamily: monoFont,
+                fontSize: 18,
+                fontWeight: 500,
+                letterSpacing: 1,
+                color: "#fff",
+              }}
+            >
+              not yet
+            </DialogTitle>
+          </DialogHeader>
+          <DialogDescription
+            style={{
+              fontFamily: monoFont,
+              fontSize: 13,
+              lineHeight: 1.6,
+              letterSpacing: 0.3,
+              color: "rgba(255,255,255,0.78)",
+            }}
+          >
+            {`Answer ${sectionsRemaining} more read${
+              sectionsRemaining === 1 ? "" : "s"
+            } — the star and all its smaller ones — before you can add a person. The sky needs to learn more about you first, so it can see how you meet someone else.`}
+          </DialogDescription>
+          <button
+            type="button"
+            onClick={() => setLockedNoticeOpen(false)}
+            style={{
+              marginTop: 6,
+              alignSelf: "flex-start",
+              background: "transparent",
+              border: "1px solid #fff",
+              color: "#fff",
+              fontFamily: monoFont,
+              fontSize: 11,
+              letterSpacing: 2,
+              textTransform: "uppercase",
+              padding: "11px 20px",
+              borderRadius: 30,
+              cursor: "pointer",
+            }}
+          >
+            keep reading
+          </button>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
