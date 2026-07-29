@@ -534,7 +534,13 @@ export default function TerminalOnboarding({
         {/* answer zone */}
         {showField && activeField && (
           <div
-            style={{ marginTop: 6, animation: "siRise .34s ease-out both" }}
+            style={{
+              marginTop: 6,
+              // Gentler and slightly longer than the old .34s ease-out, and the
+              // same curve the button uses, so the two beats read as one
+              // settling motion rather than two separate pops.
+              animation: "siRise .52s cubic-bezier(.22,.61,.36,1) both",
+            }}
           >
             {(() => {
               const isMasked =
@@ -734,27 +740,38 @@ export default function TerminalOnboarding({
                 {(timeUnknown ? "● " : "○ ") + activeField.toggle}
               </div>
             )}
-            {showButton && (
-              <button
-                onClick={submit}
-                style={{
-                  marginTop: 14,
-                  background: "transparent",
-                  border: "1px solid #fff",
-                  color: "#fff",
-                  fontFamily: '"Geist Pixel", sans-serif',
-                  fontSize: 11,
-                  letterSpacing: 2,
-                  textTransform: "uppercase",
-                  padding: "11px 20px",
-                  borderRadius: 30,
-                  cursor: "pointer",
-                  animation: "siRise .34s ease-out both",
-                }}
-              >
-                enter ⏎
-              </button>
-            )}
+            {/* Always in the DOM so it occupies its space from the moment the
+                answer zone appears. Mounting it later grew this zone, which
+                shrank the flex:1 log above and visibly shoved the date field
+                upward — that was the jump. Now only opacity/transform animate,
+                neither of which affects layout. */}
+            <button
+              onClick={submit}
+              aria-hidden={!showButton}
+              tabIndex={showButton ? 0 : -1}
+              style={{
+                marginTop: 14,
+                background: "transparent",
+                border: "1px solid #fff",
+                color: "#fff",
+                fontFamily: '"Geist Pixel", sans-serif',
+                fontSize: 11,
+                letterSpacing: 2,
+                textTransform: "uppercase",
+                padding: "11px 20px",
+                borderRadius: 30,
+                cursor: "pointer",
+                opacity: showButton ? 1 : 0,
+                transform: showButton ? "none" : "translateY(5px)",
+                // Not focusable or tappable while invisible.
+                pointerEvents: showButton ? "auto" : "none",
+                transition: reduceMotion
+                  ? "none"
+                  : "opacity .5s cubic-bezier(.22,.61,.36,1), transform .5s cubic-bezier(.22,.61,.36,1)",
+              }}
+            >
+              enter ⏎
+            </button>
           </div>
         )}
 
