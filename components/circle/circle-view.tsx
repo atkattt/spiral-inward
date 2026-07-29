@@ -26,6 +26,7 @@ import {
   LogOut,
   ArrowLeft,
   Clock,
+  Lock,
   Menu,
   X,
   Info,
@@ -33,6 +34,10 @@ import {
   User,
   Users,
 } from "lucide-react"
+import {
+  BONDS_UNLOCK_SECTIONS,
+  type BondsUnlock,
+} from "@/lib/circle/bonds-unlock"
 
 export function CircleView({
   userName,
@@ -79,6 +84,25 @@ export function CircleView({
     (fn: (() => void) | null) => setBackToCircle(() => fn),
     [],
   )
+  /**
+   * The bonds gate, published by SpiralUniverse (which owns the live verdicts,
+   * including this session's). Starts CLOSED on purpose: the alternative is
+   * flashing an open Bonds link on first paint and yanking it away a frame
+   * later, and the spiral corrects this immediately on mount.
+   */
+  const [bondsLock, setBondsLock] = useState<BondsUnlock>({
+    completedSections: 0,
+    threshold: BONDS_UNLOCK_SECTIONS,
+    remaining: BONDS_UNLOCK_SECTIONS,
+    visible: false,
+    unlocked: false,
+  })
+  // Same phrasing as the spiral's "not yet" dialog — one unit ("a read" = a
+  // star and all its smaller ones), so the two explanations can't contradict.
+  const bondsLockNote = `answer ${bondsLock.remaining} more read${
+    bondsLock.remaining === 1 ? "" : "s"
+  } — a star and all its smaller ones — to open bonds`
+
   const [erasing, setErasing] = useState(false)
   // The central avatar's resting expression. Per-read reactions (agree /
   // disagree / curious + color) are now driven inside SpiralUniverse itself
@@ -230,7 +254,7 @@ export function CircleView({
                 }}
               >
                 {/* Terminal meta line, mirroring the read cards' header */}
-                <div className="px-3 pb-2 pt-2.5 text-[9px] uppercase tracking-[0.3em] text-muted-foreground/60">
+                <div className="px-3 pb-2 pt-2.5 text-[9px] uppercase tracking-[0.3em] text-white/45">
                   Menu
                 </div>
                 <MenuItem
@@ -244,6 +268,16 @@ export function CircleView({
                   label="Bonds"
                   href="/bonds"
                   onNavigate={() => setMenuOpen(false)}
+                  locked={!bondsLock.unlocked}
+                  lockNote={bondsLockNote}
+                  // Tapping the closed door explains itself rather than doing
+                  // nothing, which would just read as a broken menu.
+                  onClick={() => {
+                    setMenuOpen(false)
+                    toast("bonds aren't open yet", {
+                      description: bondsLockNote,
+                    })
+                  }}
                 />
                 <MenuItem
                   icon={<Clock className="size-4" />}
@@ -287,6 +321,7 @@ export function CircleView({
           guestFragments={guestFragments}
           lensRanks={lensRanks}
           onBackChange={handleBackChange}
+          onBondsLockChange={setBondsLock}
         />
       </div>
 
@@ -382,24 +417,56 @@ function MenuItem({
   onClick,
   href,
   onNavigate,
+  locked,
+  lockNote,
 }: {
   icon: React.ReactNode
   label: string
   onClick?: () => void
   href?: string
   onNavigate?: () => void
+  /** Renders as a closed door: dimmed, lock glyph, and never navigates. */
+  locked?: boolean
+  /** Why it's closed — announced to screen readers, shown under the label. */
+  lockNote?: string
 }) {
-  const className =
-    "flex w-full items-center gap-2 px-3 py-3 text-left font-mono text-[11px] uppercase tracking-widest text-muted-foreground transition-colors hover:bg-foreground/[0.04] hover:text-foreground"
+  // White label + icon: at text-muted-foreground these read as dim beige
+  // against the near-black panel, closer to disabled than to the app's
+  // terminal chrome (the header's EXIT/MENU are already pure white).
+  const base =
+    "flex w-full items-center gap-2 px-3 py-3 text-left font-mono text-[11px] uppercase tracking-widest transition-colors"
+  const className = locked
+    ? `${base} cursor-not-allowed text-white/35`
+    : `${base} text-white hover:bg-white/[0.06]`
   const style = { borderTop: "1px solid #1a1a1a" }
 
   const inner = (
     <>
-      <span className="text-muted-foreground/40">{">"}</span>
-      <span className="text-muted-foreground/70">{icon}</span>
+      <span className={locked ? "text-white/25" : "text-white/60"}>{">"}</span>
+      <span className={locked ? "text-white/35" : "text-white"}>{icon}</span>
       <span>{label}</span>
+      {locked && <Lock className="ml-auto size-3" aria-hidden="true" />}
     </>
   )
+
+  // A locked entry stays focusable and keeps its role so the reason is
+  // reachable by keyboard and screen reader — rendering a <span> or dropping
+  // it entirely would just make bonds silently vanish.
+  if (locked) {
+    return (
+      <button
+        role="menuitem"
+        type="button"
+        aria-disabled="true"
+        aria-label={lockNote ? `${label} — ${lockNote}` : label}
+        onClick={onClick}
+        className={className}
+        style={style}
+      >
+        {inner}
+      </button>
+    )
+  }
 
   if (href) {
     return (

@@ -24,6 +24,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { GLASS_DIALOG_WIDTH, glassPanelStyle } from "@/lib/ui/glass"
+import { bondsUnlockState, type BondsUnlock } from "@/lib/circle/bonds-unlock"
 import { milestoneLevel, type AvatarSignals } from "@/lib/self/avatar-slots"
 import { sectionClearProgress } from "@/lib/self/lenses"
 import { UniverseReadPanel, type PanelData } from "@/components/circle/universe-read-panel"
@@ -383,9 +384,6 @@ function addPersonPoint() {
   return { x: r * Math.cos(theta), y: r * Math.sin(theta) }
 }
 
-/** How many sections (major + ALL its minis) must be complete to open bonds. */
-const BONDS_UNLOCK_SECTIONS = 3
-
 /**
  * The ⊕ badge that marks the silhouette as an invitation rather than a person.
  * Rides the lower-left of the bust, like a system "add" affordance.
@@ -467,6 +465,7 @@ export function SpiralUniverse({
   initialRevealRadius = BASE_REVEAL_RADIUS,
   onHomeChange,
   onBackChange,
+  onBondsLockChange,
   matchedReads,
   initialResponses,
   guestFragments,
@@ -495,6 +494,12 @@ export function SpiralUniverse({
    * lives in here.
    */
   onBackChange?: (back: (() => void) | null) => void
+  /**
+   * Publishes the bonds gate so the header menu can dim its Bonds entry.
+   * The parent can't derive this: the live verdicts (including this session's
+   * unsaved ones) only exist in here.
+   */
+  onBondsLockChange?: (state: BondsUnlock) => void
   /** authed: matched fragments from the /self pipeline (weight desc) */
   matchedReads?: UniverseFragment[]
   /** authed: saved agree/disagree per fragment id from read_responses */
@@ -813,31 +818,27 @@ export function SpiralUniverse({
   )
 
   /**
-   * BONDS PROGRESSION — how many sections are COMPLETE (major + all minis).
-   * fullyAnswered already encodes exactly that rule, so this is just a count;
-   * it deliberately does NOT use unlockedCount, which advances to the next
-   * section and would read one ahead of what's actually finished.
+   * BONDS PROGRESSION — deferred to the shared rule in lib/circle/bonds-unlock,
+   * so the spiral's dimmed invitation, the menu's Bonds entry, and the /bonds
+   * route guard can never disagree about whether bonds are open.
    */
-  const completedSections = useMemo(
-    () => fullyAnswered.filter(Boolean).length,
-    [fullyAnswered],
+  const bondsLock = useMemo(
+    () => bondsUnlockState(fragments, respondedIds),
+    [fragments, respondedIds],
   )
-  // The invitation appears once the FIRST section is complete — the sky has
-  // learned something about you, so it can hint at bonds — but stays dim until
-  // three are done, because a bond read needs that much of your chart to say
-  // anything true about you and someone else.
-  //
-  // Clamped to the number of sections that actually EXIST: a sparse chart can
-  // yield fewer than three sections, and an unclamped threshold would leave
-  // such a user staring at a permanently dimmed invitation with no way to
-  // reach it. Finishing everything the sky has must always be enough.
-  const bondsThreshold = Math.min(
-    BONDS_UNLOCK_SECTIONS,
-    Math.max(1, sections.length),
-  )
-  const sectionsRemaining = Math.max(0, bondsThreshold - completedSections)
-  const addPersonVisible = completedSections >= 1
-  const addPersonUnlocked = sectionsRemaining === 0
+  const sectionsRemaining = bondsLock.remaining
+  const addPersonVisible = bondsLock.visible
+  const addPersonUnlocked = bondsLock.unlocked
+
+  // Report the gate upward so the header menu can dim its Bonds entry in step
+  // with this session's answers. Effect (not render) so the parent's setState
+  // never fires mid-render; through a ref (like onBackChange) so an inline
+  // parent callback can't re-fire this every render.
+  const onBondsLockChangeRef = useRef(onBondsLockChange)
+  onBondsLockChangeRef.current = onBondsLockChange
+  useEffect(() => {
+    onBondsLockChangeRef.current?.(bondsLock)
+  }, [bondsLock])
   const [addOpen, setAddOpen] = useState(false)
   const [lockedNoticeOpen, setLockedNoticeOpen] = useState(false)
 
