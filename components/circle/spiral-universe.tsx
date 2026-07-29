@@ -2348,9 +2348,9 @@ export function SpiralUniverse({
           circle. Reuses the same dialog the bonds page uses. */}
       <AddPersonDialog open={addOpen} onOpenChange={setAddOpen} />
 
-      {/* Why bonds aren't open yet — shown when the dimmed invitation is
-          tapped. Explains the reason (the sky needs to know you first) rather
-          than just refusing, and names exactly how much is left. */}
+      {/* Why bonds aren't open yet, shown when the dimmed invitation is
+          tapped. Names exactly how much is left and what a read is, rather
+          than just refusing. */}
       <Dialog open={lockedNoticeOpen} onOpenChange={setLockedNoticeOpen}>
         <DialogContent
           className={`${GLASS_DIALOG_WIDTH} gap-3 p-4 ring-0`}
@@ -2378,9 +2378,13 @@ export function SpiralUniverse({
               color: "rgba(255,255,255,0.78)",
             }}
           >
-            {`Answer ${sectionsRemaining} more read${
+            {/* Lowercase, no em dashes, and the "the sky needs to learn more
+                about you" line is gone: it restated the first sentence at
+                greater length. What's left is the ask and the unit, in the
+                voice of a friend rather than an oracle. */}
+            {`just ${sectionsRemaining} more read${
               sectionsRemaining === 1 ? "" : "s"
-            } — the star and all its smaller ones — before you can add a person. The sky needs to learn more about you first, so it can see how you meet someone else.`}
+            } and you can add people. a read is one star plus all the little ones under it.`}
           </DialogDescription>
           <button
             type="button"

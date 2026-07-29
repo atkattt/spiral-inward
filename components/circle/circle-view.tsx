@@ -97,11 +97,12 @@ export function CircleView({
     visible: false,
     unlocked: false,
   })
-  // Same phrasing as the spiral's "not yet" dialog — one unit ("a read" = a
-  // star and all its smaller ones), so the two explanations can't contradict.
-  const bondsLockNote = `answer ${bondsLock.remaining} more read${
+  // Same voice and same unit as the spiral's "not yet" dialog, so the two
+  // explanations can't contradict. The dialog is where "a read" gets defined;
+  // this is a one-line note under a menu item, so it just states the ask.
+  const bondsLockNote = `just ${bondsLock.remaining} more read${
     bondsLock.remaining === 1 ? "" : "s"
-  } — a star and all its smaller ones — to open bonds`
+  } and bonds opens`
 
   const [erasing, setErasing] = useState(false)
   // The central avatar's resting expression. Per-read reactions (agree /
