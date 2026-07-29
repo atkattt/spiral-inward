@@ -1925,59 +1925,78 @@ export function SpiralUniverse({
             drift off the rim at later stages. Rendered after the disc so it
             paints above the rim line it crosses. ===== */}
         <div
-          className="absolute left-1/2 flex items-center justify-center overflow-hidden rounded-full"
+          className="absolute left-1/2 rounded-full"
           style={{
             // Center sits just inside the rim, so the outline crosses the
             // plate's lower third exactly as in the design.
             top: `calc(50% + ${discSize / 2 - 6}px)`,
             transform: "translate(-50%, -50%)",
-            padding: "3px 12px",
-            backgroundColor: "#050505",
-            border: `1.5px solid ${panel?.data.accent ?? NEUTRAL_COLOR}`,
+            // Outward glow lives out here, above the clip layer, so it isn't
+            // eaten by that layer's overflow-hidden.
             boxShadow: panel?.data.accent
               ? `0 0 12px ${panel.data.accent}55`
               : "none",
             // Mirrors the disc's easing so outline color and stage growth move
             // together instead of the plate snapping while the disc glides.
             transition:
-              "border-color .5s ease, box-shadow .5s ease, top .8s cubic-bezier(.3,.8,.3,1)",
+              "box-shadow .5s ease, top .8s cubic-bezier(.3,.8,.3,1)",
           }}
         >
-          <span
-            style={{
-              fontFamily: "'Geist Pixel', ui-monospace, monospace",
-              fontSize: 13,
-              lineHeight: 1.15,
-              color: reactColor ?? NEUTRAL_COLOR,
-              // Same glow the creature's glyphs carry, so the text sits on the
-              // same light as the face above it.
-              filter: `drop-shadow(0 0 6px ${reactColor ?? NEUTRAL_COLOR})`,
-              transition: "color .5s ease, filter .5s ease",
-              userSelect: "none",
-            }}
-          >
-            you
-          </span>
+          {/* Clip layer. Its only job is to give the LED overlay a box that
+              INCLUDES the pill's outline. The creature's LCD is sized to the
+              full disc, so the disc's rim sits *under* the grid and vignette and
+              reads dimmer than its raw color; an overlay pinned to inset-0 of
+              the bordered element itself would stop at the padding box and
+              leave the outline at full brightness — which is exactly why the
+              pill's outline looked brighter than the circle's despite both
+              being the identical color string. */}
+          <div className="relative overflow-hidden rounded-full">
+            <div
+              className="flex items-center justify-center rounded-full"
+              style={{
+                padding: "3px 12px",
+                backgroundColor: "#050505",
+                border: `1.5px solid ${panel?.data.accent ?? NEUTRAL_COLOR}`,
+                transition: "border-color .5s ease",
+              }}
+            >
+              <span
+                style={{
+                  fontFamily: "'Geist Pixel', ui-monospace, monospace",
+                  fontSize: 13,
+                  lineHeight: 1.15,
+                  color: reactColor ?? NEUTRAL_COLOR,
+                  // Same glow the creature's glyphs carry, so the text sits on
+                  // the same light as the face above it.
+                  filter: `drop-shadow(0 0 6px ${reactColor ?? NEUTRAL_COLOR})`,
+                  transition: "color .5s ease, filter .5s ease",
+                  userSelect: "none",
+                }}
+              >
+                you
+              </span>
+            </div>
 
-          {/* The LED treatment, floated over text AND fill. Same recipe and
-              same FIXED 2px sub-pixel pitch as the creature's screen — that
-              constant pitch is what makes a plate this small read as the same
-              display as the big face, so it must not be scaled down. */}
-          <div
-            aria-hidden="true"
-            className="pointer-events-none absolute inset-0"
-            style={{
-              boxShadow: "inset 0 0 8px 2px rgba(0,0,0,0.6)",
-              backgroundImage: `repeating-linear-gradient(to right,
-                  rgba(255,60,60,.05) 0 .67px,
-                  rgba(60,255,120,.05) .67px 1.33px,
-                  rgba(80,120,255,.05) 1.33px 2px),
-                repeating-linear-gradient(to bottom,
-                  transparent 0 1px, rgba(0,0,0,0.16) 1px 2px),
-                repeating-linear-gradient(to right,
-                  transparent 0 1px, rgba(0,0,0,0.16) 1px 2px)`,
-            }}
-          />
+            {/* The LED treatment, floated over outline, fill AND text. Same
+                recipe and same FIXED 2px sub-pixel pitch as the creature's
+                screen — that constant pitch is what makes a plate this small
+                read as the same display as the big face. */}
+            <div
+              aria-hidden="true"
+              className="pointer-events-none absolute inset-0"
+              style={{
+                boxShadow: "inset 0 0 8px 2px rgba(0,0,0,0.6)",
+                backgroundImage: `repeating-linear-gradient(to right,
+                    rgba(255,60,60,.05) 0 .67px,
+                    rgba(60,255,120,.05) .67px 1.33px,
+                    rgba(80,120,255,.05) 1.33px 2px),
+                  repeating-linear-gradient(to bottom,
+                    transparent 0 1px, rgba(0,0,0,0.16) 1px 2px),
+                  repeating-linear-gradient(to right,
+                    transparent 0 1px, rgba(0,0,0,0.16) 1px 2px)`,
+              }}
+            />
+          </div>
         </div>
           {/* Tap target over the face → opens the chart read sheet. Still
               works inside the transformed layer: the stage's pointerdown
