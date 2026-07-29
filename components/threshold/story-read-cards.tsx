@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { STORY_SECTIONS, type StorySection } from "@/components/threshold/story-content"
+import { glassPanelStyle } from "@/lib/ui/glass"
 
 /**
  * StoryReadCards
@@ -192,14 +193,10 @@ function StoryReadCard({
       ref={ref}
       style={{
         width: "100%",
-        // Translucent grey glass card to match the /onboarding surface.
-        border: "1px solid rgba(255,255,255,0.18)",
-        borderRadius: 13,
-        background: "rgba(120,120,120,0.30)",
-        backdropFilter: "blur(12px) saturate(120%)",
-        WebkitBackdropFilter: "blur(12px) saturate(120%)",
-        boxShadow:
-          "0 16px 40px rgba(0,0,0,0.28), inset 0 1px 0 rgba(255,255,255,0.14)",
+        // The house glass surface, shared with the dialogs and the self view so
+        // all three can't drift apart again (this file used to own its own copy
+        // of these values).
+        ...glassPanelStyle,
         padding: "16px 18px 18px",
         fontFamily: MONO,
         // Only the cards after the first animate in; the first is already on

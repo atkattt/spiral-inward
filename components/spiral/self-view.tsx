@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react"
 import { useSpiral } from "@/components/spiral/spiral-provider"
 import type { Truth } from "@/lib/spiral/reads"
+import { glassPanelStyle } from "@/lib/ui/glass"
 
 // This section is treated exactly like the "what this is" story cards on
 // /about (see components/threshold/story-read-cards.tsx): a translucent grey
@@ -10,15 +11,10 @@ import type { Truth } from "@/lib/spiral/reads"
 // itself out behind a `›` prompt with a blinking cursor.
 const MONO = "'Geist Pixel', ui-monospace, monospace"
 
-// The story card's glass surface, value-for-value.
+// The story card's glass surface, now from the shared token rather than a
+// third hand-copy of the same numbers.
 const glassCardStyle: React.CSSProperties = {
-  border: "1px solid rgba(255,255,255,0.18)",
-  borderRadius: 13,
-  background: "rgba(120,120,120,0.30)",
-  backdropFilter: "blur(12px) saturate(120%)",
-  WebkitBackdropFilter: "blur(12px) saturate(120%)",
-  boxShadow:
-    "0 16px 40px rgba(0,0,0,0.28), inset 0 1px 0 rgba(255,255,255,0.14)",
+  ...glassPanelStyle,
   padding: "16px 18px 18px",
   fontFamily: MONO,
 }

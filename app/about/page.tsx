@@ -13,7 +13,12 @@ export const metadata = {
 export default function AboutPage() {
   return (
     <main className="relative min-h-[100dvh] overflow-y-auto bg-background">
-      <Starfield count={70} />
+      {/* Denser than the default here because this page's glass cards cover
+          most of the column: backdrop-filter can only redistribute light that
+          already exists behind it, and at 70 stars there were only two or three
+          single pixels back there, so the blur had nothing to refract and the
+          cards composited to flat grey. */}
+      <Starfield count={190} />
 
       {/* Header: a quiet way back to the spiral */}
       <header className="relative z-20 flex items-center px-5 pt-6">

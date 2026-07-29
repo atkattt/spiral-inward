@@ -21,14 +21,47 @@ import type { CSSProperties } from "react"
  *  2. Pair it with `ring-0`, since the primitive's `ring-1` would otherwise draw
  *     a second hairline immediately outside this border.
  */
+/**
+ * WHY THIS ISN'T A FLAT FILL
+ *
+ * The previous version was a single `rgba(120,120,120,0.30)` over a blur. That
+ * reads as glass over the spiral — which is bright and busy — but over a nearly
+ * black page (/about is `lab(0 0 0)` with 70 one-pixel stars) it composites to a
+ * dead flat #363636 slab. `backdrop-filter` can only redistribute light that is
+ * already behind the panel, and blurring black by 12px yields black, so on a
+ * dark page there is nothing for it to work with.
+ *
+ * Real glass reads as glass because of light ON the pane, not only what shows
+ * through it. So the surface now supplies its own:
+ *
+ *  - a directional sheen (`165deg`, brighter at the top-left shoulder, falling
+ *    off toward the bottom) instead of one uniform tone,
+ *  - a bright top inset edge where light catches the lip,
+ *  - a dark bottom inset so the pane has thickness rather than being a sticker.
+ *
+ * Mean opacity is kept close to the old flat value on purpose: these panels also
+ * host white body text over the busy spiral, and going much more transparent
+ * would cost legibility there.
+ */
 export const glassPanelStyle: CSSProperties = {
-  border: "1px solid rgba(255,255,255,0.18)",
+  border: "1px solid rgba(255,255,255,0.16)",
   borderRadius: 13,
-  background: "rgba(120,120,120,0.30)",
-  backdropFilter: "blur(12px) saturate(120%)",
-  WebkitBackdropFilter: "blur(12px) saturate(120%)",
+  // Topmost layer first. The gradient is the sheen; the flat grey underneath is
+  // the body of the pane, keeping text legible when nothing is behind it.
+  // The base alpha is deliberately 0.20 rather than lower: composited with the
+  // sheen it lands at ~0.31 at the top (matching the old flat 0.30) and ~0.22 at
+  // the bottom. Dropping the base further looked glassier in isolation but thinned
+  // the foot of the panel to ~0.19, and these same panels host white body text
+  // over the bright spiral — that's the surface where contrast is tightest.
+  background:
+    "linear-gradient(165deg, rgba(255,255,255,0.14) 0%, rgba(255,255,255,0.06) 42%, rgba(255,255,255,0.02) 100%), rgba(122,122,128,0.20)",
+  // brightness() lifts whatever IS behind the panel so the refraction reads;
+  // it's a no-op against pure black, which is why the gradient above carries
+  // the effect on dark pages.
+  backdropFilter: "blur(14px) saturate(150%) brightness(115%)",
+  WebkitBackdropFilter: "blur(14px) saturate(150%) brightness(115%)",
   boxShadow:
-    "0 16px 40px rgba(0,0,0,0.28), inset 0 1px 0 rgba(255,255,255,0.14)",
+    "0 16px 40px rgba(0,0,0,0.34), inset 0 1px 0 rgba(255,255,255,0.22), inset 0 -1px 0 rgba(0,0,0,0.22)",
 }
 
 /**
