@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useRef, useState } from "react"
 
+import { LED_FIELD_GRID_ALPHA, ledTexture } from "@/lib/ui/led"
+
 /**
  * UniverseReadPanel
  *
@@ -161,16 +163,44 @@ export function UniverseReadPanel({
 
   return (
     <>
-      {/* Scrim */}
+      {/* Read-phase field: opaque black carrying the LED texture, edge to edge.
+
+          z-[70] is deliberate. This panel renders INSIDE SpiralUniverse, whose
+          own layers go up to z-[60] — the spiral-centre avatar, an opaque black
+          disc with the little creature on it. That disc is the "circle" that was
+          still visible behind and below the face during a read, so the field has
+          to outrank it; anything at or under 60 paints beneath it.
+
+          It still passes UNDER the header. CircleView puts the whole spiral in a
+          `relative z-10` wrapper and the header in a sibling `relative z-30`, so
+          every z-index in here — 70 included — is trapped below the header's
+          stacking context. That gets the texture running behind BACK/MENU rather
+          than stopping short and leaving them on bare black, without needing to
+          coordinate values with the header.
+
+          Being fully opaque is what hides the sky. The scrim used to do this at
+          55% black with a 2px backdrop blur, which left the spiral and its
+          markers faintly legible behind the read. */}
+      <div
+        aria-hidden="true"
+        className="pointer-events-none fixed inset-0 z-[70] transition-opacity duration-300"
+        style={{
+          backgroundColor: "#000",
+          backgroundImage: ledTexture(LED_FIELD_GRID_ALPHA),
+          opacity: open ? 1 : 0,
+        }}
+      />
+
+      {/* Scrim — now purely the tap target. It carries no colour of its own:
+          the field above is already opaque, so tinting here would only darken
+          the texture (and dim the header, which sits under this layer). */}
       <button
         aria-hidden={!open}
         tabIndex={-1}
         onClick={onClose}
-        className="fixed inset-0 z-40 cursor-default transition-opacity duration-300"
+        className="fixed inset-0 z-[80] cursor-default"
         style={{
-          background: "rgba(0,0,0,0.55)",
-          backdropFilter: "blur(2px)",
-          opacity: open ? 1 : 0,
+          background: "transparent",
           pointerEvents: open ? "auto" : "none",
         }}
       />
@@ -195,7 +225,9 @@ export function UniverseReadPanel({
          * An 8px gutter each side costs almost no reading width and keeps the
          * bottom flush, so it still reads as a sheet rising from the edge.
          */
-        className="fixed inset-x-2 bottom-0 z-50 mx-auto w-auto max-w-[440px]"
+        /* z-[90]: above both the read-phase field (70) and the scrim (80),
+           which were raised past SpiralUniverse's own z-[60] layers. */
+        className="fixed inset-x-2 bottom-0 z-[90] mx-auto w-auto max-w-[440px]"
         style={{
           background: "#070707",
           // Explicit sides (not the `border` shorthand) so React doesn't see

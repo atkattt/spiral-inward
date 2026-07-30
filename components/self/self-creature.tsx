@@ -37,6 +37,7 @@ import {
   type MilestoneSlot,
   type PaletteFallbacks,
 } from "@/lib/self/avatar-slots"
+import { ledTexture } from "@/lib/ui/led"
 
 /**
  * SelfCreature — the composed ASCII "you".
@@ -731,14 +732,9 @@ const SelfCreature = forwardRef<SelfCreatureHandle, Props>(function SelfCreature
               pointerEvents: "none",
               maskImage: GRID_FADE_MASK,
               WebkitMaskImage: GRID_FADE_MASK,
-              backgroundImage: `repeating-linear-gradient(to right,
-                  rgba(255,60,60,.05) 0 .67px,
-                  rgba(60,255,120,.05) .67px 1.33px,
-                  rgba(80,120,255,.05) 1.33px 2px),
-                repeating-linear-gradient(to bottom,
-                  transparent 0 1px, rgba(0,0,0,${lcdMetrics.gridAlpha}) 1px 2px),
-                repeating-linear-gradient(to right,
-                  transparent 0 1px, rgba(0,0,0,${lcdMetrics.gridAlpha}) 1px 2px)`,
+              // Shared, desaturated texture — see lib/ui/led.ts. The stripes
+              // used to be RGB here, which tinted the avatar's own screen.
+              backgroundImage: ledTexture(lcdMetrics.gridAlpha),
             }}
           />
           {/* The vignette, at the original size/radius/blur/spread/alpha.
@@ -823,7 +819,20 @@ const GRID_FADE_MASK =
 const VIGNETTE_FADE_MASK =
   "radial-gradient(ellipse farthest-side at center, #000 60%, transparent 100%)"
 
-/** A few faint glyph motes drifting within the circle. */
+/**
+ * Mote ring geometry, as fractions of the container.
+ *
+ * MOTE_INNER is the clear zone: nothing is placed closer to the centre than
+ * 62% of the way out, which keeps the face free of specks. MOTE_RX/MOTE_RY are
+ * the ring's half-extents in % — wider than tall to match the face's shape, and
+ * capped below 50 so motes stay inside the box.
+ */
+const MOTE_INNER = 0.62
+const MOTE_OUTER = 1
+const MOTE_RX = 46
+const MOTE_RY = 42
+
+/** A few faint glyph motes drifting in a ring around the face. */
 function Dust({ color, size }: { color: string; size: number }) {
   // The motes use Math.random(), which would differ between the server and
   // client and cause a hydration mismatch. They're purely decorative, so we
@@ -834,15 +843,37 @@ function Dust({ color, size }: { color: string; size: number }) {
   const motes = useMemo(
     () =>
       mounted
-        ? Array.from({ length: 9 }).map((_, i) => ({
-            id: i,
-            left: 12 + Math.random() * 76, // %
-            top: 12 + Math.random() * 76, // %
-            delay: Math.random() * 6,
-            dur: 5 + Math.random() * 5,
-            char: Math.random() > 0.5 ? "·" : "*",
-            op: 0.12 + Math.random() * 0.22,
-          }))
+        ? Array.from({ length: 9 }).map((_, i) => {
+            /**
+             * Placed in a RING, not across the whole box.
+             *
+             * These used to be uniform (`12 + random() * 76` on both axes), so
+             * on any given mount a few landed directly behind the glyphs —
+             * specks sitting inside the eyes and brackets, which made the face
+             * read as busy/dirty rather than as a clean avatar.
+             *
+             * Sampling an angle plus a radius in [MOTE_INNER, MOTE_OUTER]
+             * leaves the middle permanently empty, so no seed can put a mote on
+             * the face. The scatter still looks random because the angle is
+             * free and the radius varies across the band.
+             *
+             * The ellipse is wider than tall (rx > ry) because the face is
+             * wider than tall — a circular hole would clear the eyes but still
+             * allow specks on the outer brackets.
+             */
+            const angle = Math.random() * Math.PI * 2
+            const radius =
+              MOTE_INNER + Math.random() * (MOTE_OUTER - MOTE_INNER)
+            return {
+              id: i,
+              left: 50 + Math.cos(angle) * radius * MOTE_RX, // %
+              top: 50 + Math.sin(angle) * radius * MOTE_RY, // %
+              delay: Math.random() * 6,
+              dur: 5 + Math.random() * 5,
+              char: Math.random() > 0.5 ? "·" : "*",
+              op: 0.12 + Math.random() * 0.22,
+            }
+          })
         : [],
     [mounted],
   )

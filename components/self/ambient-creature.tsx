@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react"
 import { RIPPLE_STAGGER_MS, randomScramble } from "@/lib/self/mutation"
+import { ledTexture } from "@/lib/ui/led"
 
 /**
  * AmbientCreature — a "demo mode" of the self being for the landing page.
@@ -281,15 +282,16 @@ export default function AmbientCreature({ size = 200 }: { size?: number }) {
         </div>
       </div>
 
-      {/* The same LED/LCD screen overlay the /self avatar wears: RGB sub-pixel
-          stripes + a scanline grid floated ABOVE the glyphs, carrying an inner
-          vignette so the disc reads as a lit panel rather than flat text.
+      {/* The same LED/LCD screen overlay the /self avatar wears: neutral
+          sub-pixel stripes + a scanline grid floated ABOVE the glyphs, carrying
+          an inner vignette so the disc reads as a lit panel rather than flat
+          text.
 
-          Ported value-for-value from SelfCreature's `lcd` branch (this
-          component composes faces itself and doesn't render SelfCreature, so
-          the props couldn't just be forwarded). The sub-pixel pitch is FIXED at
-          2px there on purpose, so a small avatar reads as the same physical
-          screen as a large one; only the vignette blur/spread scale. */}
+          The texture now comes from the shared ledTexture() rather than being
+          a local copy of SelfCreature's values — the copies had drifted, so
+          this disc and the /self avatar rendered subtly different hues. Pitch
+          stays FIXED at 2px so a small avatar reads as the same physical screen
+          as a large one; only the vignette blur/spread scale. */}
       <div
         aria-hidden="true"
         className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full"
@@ -297,14 +299,7 @@ export default function AmbientCreature({ size = 200 }: { size?: number }) {
           width: disc,
           height: disc,
           boxShadow: `inset 0 0 ${lcd.blur}px ${lcd.spread}px rgba(0,0,0,0.6)`,
-          backgroundImage: `repeating-linear-gradient(to right,
-              rgba(255,60,60,.05) 0 .67px,
-              rgba(60,255,120,.05) .67px 1.33px,
-              rgba(80,120,255,.05) 1.33px 2px),
-            repeating-linear-gradient(to bottom,
-              transparent 0 1px, rgba(0,0,0,${LCD_GRID_ALPHA}) 1px 2px),
-            repeating-linear-gradient(to right,
-              transparent 0 1px, rgba(0,0,0,${LCD_GRID_ALPHA}) 1px 2px)`,
+          backgroundImage: ledTexture(LCD_GRID_ALPHA),
         }}
       />
     </div>

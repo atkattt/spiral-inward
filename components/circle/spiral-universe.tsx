@@ -24,6 +24,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { GLASS_DIALOG_WIDTH, glassPanelStyle, ledOverlayStyle } from "@/lib/ui/glass"
+import { ledTexture } from "@/lib/ui/led"
 import { bondsUnlockState, type BondsUnlock } from "@/lib/circle/bonds-unlock"
 import { milestoneLevel, type AvatarSignals } from "@/lib/self/avatar-slots"
 import { sectionClearProgress } from "@/lib/self/lenses"
@@ -1747,7 +1748,7 @@ export function SpiralUniverse({
         className="absolute left-0 top-0"
         style={{ width: 0, height: 0, transformOrigin: "0 0", willChange: "transform" }}
       >
-        {/* ── Nebula, glow underlay ──────────────────────────────────────
+        {/* ── Nebula, glow underlay ────────────────────────────���─────────
             One layer holding a soft bloom blob per glyph. Lit (inside-
             frontier) blobs carry the cool moonlit glow; locked ones sit at
             opacity 0. PERF: these are radial-gradient discs — already soft,
@@ -2172,14 +2173,8 @@ export function SpiralUniverse({
               className="pointer-events-none absolute inset-0"
               style={{
                 boxShadow: "inset 0 0 8px 2px rgba(0,0,0,0.6)",
-                backgroundImage: `repeating-linear-gradient(to right,
-                    rgba(255,60,60,.05) 0 .67px,
-                    rgba(60,255,120,.05) .67px 1.33px,
-                    rgba(80,120,255,.05) 1.33px 2px),
-                  repeating-linear-gradient(to bottom,
-                    transparent 0 1px, rgba(0,0,0,0.16) 1px 2px),
-                  repeating-linear-gradient(to right,
-                    transparent 0 1px, rgba(0,0,0,0.16) 1px 2px)`,
+                // Shared, desaturated texture — see lib/ui/led.ts.
+                backgroundImage: ledTexture(0.16),
               }}
             />
           </div>
@@ -2336,7 +2331,19 @@ export function SpiralUniverse({
                   blinkMaxMs={activeMood.blinkMaxMs}
                   blinkHoldMs={activeMood.blinkHoldMs}
                   ember={activeMood.ember}
-                  lcd
+                  /**
+                   * No `lcd` here on purpose.
+                   *
+                   * The read-phase field in UniverseReadPanel now paints the LED
+                   * texture across the whole viewport, and this creature sits on
+                   * top of it. Drawing its own grid too stacked a second
+                   * identical 2px grid over the first — the two can't align, so
+                   * the overlap darkened and moiréd exactly where the face is,
+                   * and its box edge was the rectangle framing the avatar.
+                   *
+                   * One continuous field reads as a single screen, which is the
+                   * point: nothing changes texture when a read opens.
+                   */
                 />
               </div>
             </div>
