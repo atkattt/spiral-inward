@@ -27,11 +27,24 @@ const LED_STRIPE = "216,222,232"
 export const LED_PITCH_PX = 2
 
 /**
- * Scanline darkness for a full-screen field. Lower than an avatar's, because
- * across a whole viewport the same value reads as a heavy grey wash rather than
- * a subtle screen.
+ * Scanline darkness for the full-screen read-phase field.
+ *
+ * This is a SINGLE-PASS value. The field used to paint at 0.1 and a second
+ * overlay painted 0.1 again on top over the sky, compositing to
+ * 1-(1-.1)² ≈ 0.19 there while the strip beside the read sheet — covered by one
+ * layer only — stayed at 0.10. Same texture, visibly different tone, with a
+ * hard seam along the sheet's top edge. Now exactly one layer paints the
+ * texture, so this value is what shows everywhere, and it is set at the
+ * stronger end of that old range for a bit more relief.
  */
-export const LED_FIELD_GRID_ALPHA = 0.1
+export const LED_FIELD_GRID_ALPHA = 0.22
+
+/**
+ * Stripe boost for the field, for the same reason as above: two passes of the
+ * base stripe alpha composited to ~0.0975, so a single pass needs roughly 2x to
+ * keep the sub-pixel relief the sky already had.
+ */
+export const LED_FIELD_STRIPE_BOOST = 2.1
 
 /**
  * The texture, as a `background-image` value.
@@ -41,12 +54,17 @@ export const LED_FIELD_GRID_ALPHA = 0.1
  * survives any container size.
  *
  * @param gridAlpha darkness of the scanlines (0-1).
+ * @param stripeBoost multiplier on the sub-pixel stripe alphas. Defaults to 1
+ *   (the avatar-surface value); the full-screen field passes ~2 because it
+ *   paints in one pass where it used to composite two.
  */
-export function ledTexture(gridAlpha: number): string {
+export function ledTexture(gridAlpha: number, stripeBoost = 1): string {
+  const edge = (0.05 * stripeBoost).toFixed(4)
+  const mid = (0.035 * stripeBoost).toFixed(4)
   return `repeating-linear-gradient(to right,
-      rgba(${LED_STRIPE},.05) 0 .67px,
-      rgba(${LED_STRIPE},.035) .67px 1.33px,
-      rgba(${LED_STRIPE},.05) 1.33px 2px),
+      rgba(${LED_STRIPE},${edge}) 0 .67px,
+      rgba(${LED_STRIPE},${mid}) .67px 1.33px,
+      rgba(${LED_STRIPE},${edge}) 1.33px 2px),
     repeating-linear-gradient(to bottom,
       transparent 0 1px, rgba(0,0,0,${gridAlpha}) 1px 2px),
     repeating-linear-gradient(to right,

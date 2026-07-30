@@ -2,7 +2,11 @@
 
 import { useCallback, useEffect, useRef, useState } from "react"
 
-import { LED_FIELD_GRID_ALPHA, ledTexture } from "@/lib/ui/led"
+import {
+  LED_FIELD_GRID_ALPHA,
+  LED_FIELD_STRIPE_BOOST,
+  ledTexture,
+} from "@/lib/ui/led"
 
 /**
  * UniverseReadPanel
@@ -127,12 +131,26 @@ export function UniverseReadPanel({
   // panel's top edge. The stage fills it so the creature centers vertically
   // between the two. Re-measured whenever the panel's content resizes.
   const [skyH, setSkyH] = useState(0)
+  /**
+   * The panel's left and right edges in viewport px.
+   *
+   * Needed because the LED overlay now spans the FULL viewport and cuts the
+   * sheet out of itself, rather than stopping above it — that cutout has to know
+   * where the sheet actually is. Measured rather than recomputed from
+   * `inset-x-2` / `max-w-[440px]`, so the two can't drift apart.
+   */
+  const [panelX, setPanelX] = useState<{ left: number; right: number } | null>(
+    null,
+  )
   useEffect(() => {
     if (!open) return
     const el = panelRef.current
     if (!el) return
-    const measure = () =>
+    const measure = () => {
       setSkyH(Math.max(0, window.innerHeight - el.offsetHeight))
+      const r = el.getBoundingClientRect()
+      setPanelX({ left: r.left, right: r.right })
+    }
     measure()
     const ro = new ResizeObserver(measure)
     ro.observe(el)
@@ -180,13 +198,18 @@ export function UniverseReadPanel({
 
           Being fully opaque is what hides the sky. The scrim used to do this at
           55% black with a 2px backdrop blur, which left the spiral and its
-          markers faintly legible behind the read. */}
+          markers faintly legible behind the read.
+
+          It carries NO texture — only the black. The texture lives entirely in
+          the single overlay below. When both painted it, every region the
+          overlay reached got two composited passes while the strip beside the
+          sheet got one, which is exactly the tone difference around the text
+          box. */}
       <div
         aria-hidden="true"
         className="pointer-events-none fixed inset-0 z-[70] transition-opacity duration-300"
         style={{
           backgroundColor: "#000",
-          backgroundImage: ledTexture(LED_FIELD_GRID_ALPHA),
           opacity: open ? 1 : 0,
         }}
       />
@@ -225,20 +248,47 @@ export function UniverseReadPanel({
              would resolve against the panel box and drift with the slide,
              breaking the shared origin.
 
-          Height stops at the panel's top edge (+dragY, so it tracks the
-          swipe-to-dismiss gesture) rather than filling the viewport. Covering
-          the panel too would lay this grid over the sheet's own chrome texture,
-          which is the one place a second grid really would double up.
+          It spans the FULL viewport and clips the sheet out of itself, instead
+          of being a strip that stops at the sheet's top edge. As a strip it left
+          the columns either side of the sheet uncovered, and since the field was
+          also painting texture back then those columns got one pass where the
+          sky got two — a darker, flatter band around the text box with a hard
+          seam along the sheet's top. Now one layer covers every visible pixel of
+          screen in a single pass, so the tone is identical from the very top
+          down past the sheet's shoulders to the bottom corners.
 
-          Background is transparent: the field already supplies the black. Any
-          fill here would hide the avatar rather than veil it. */}
-      {open && skyH > 0 && (
+          The cutout is a U-shaped polygon rather than a smaller rectangle
+          because the sheet is flush with the bottom edge: trace the viewport,
+          then dive down its left side, across its top, and back up its right.
+          `clip-path` doesn't move the background origin, so the grid stays
+          locked to the viewport on both sides of the cut and the lines continue
+          straight past the sheet without a jog.
+
+          Clipping (not just stopping above) is what keeps this off the sheet
+          itself, whose chrome carries its own texture — the one place a second
+          grid really would double up.
+
+          Background is transparent: the field supplies the black. Any fill here
+          would hide the avatar rather than veil it. */}
+      {open && skyH > 0 && panelX && (
         <div
           aria-hidden="true"
-          className="pointer-events-none fixed inset-x-0 top-0 z-[95]"
+          className="pointer-events-none fixed inset-0 z-[95]"
           style={{
-            height: skyH + dragY,
-            backgroundImage: ledTexture(LED_FIELD_GRID_ALPHA),
+            backgroundImage: ledTexture(
+              LED_FIELD_GRID_ALPHA,
+              LED_FIELD_STRIPE_BOOST,
+            ),
+            clipPath: `polygon(
+              0 0,
+              100% 0,
+              100% 100%,
+              ${panelX.right}px 100%,
+              ${panelX.right}px ${skyH + dragY}px,
+              ${panelX.left}px ${skyH + dragY}px,
+              ${panelX.left}px 100%,
+              0 100%
+            )`,
           }}
         />
       )}
