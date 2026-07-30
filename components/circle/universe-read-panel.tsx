@@ -5,7 +5,10 @@ import { useCallback, useEffect, useRef, useState } from "react"
 import {
   LED_FIELD_GRID_ALPHA,
   LED_FIELD_STRIPE_BOOST,
+  LED_FIELD_STRIPE_MID_SCALE,
+  LED_SHEET_RADIUS_PX,
   ledTexture,
+  sheetHoleMask,
 } from "@/lib/ui/led"
 
 /**
@@ -132,16 +135,21 @@ export function UniverseReadPanel({
   // between the two. Re-measured whenever the panel's content resizes.
   const [skyH, setSkyH] = useState(0)
   /**
-   * The panel's left and right edges in viewport px.
+   * The panel's box in viewport px.
    *
-   * Needed because the LED overlay now spans the FULL viewport and cuts the
-   * sheet out of itself, rather than stopping above it — that cutout has to know
-   * where the sheet actually is. Measured rather than recomputed from
-   * `inset-x-2` / `max-w-[440px]`, so the two can't drift apart.
+   * Needed because the LED overlay spans the FULL viewport and cuts the sheet
+   * out of itself, rather than stopping above it — that cutout has to know where
+   * the sheet actually is. Measured rather than recomputed from `inset-x-2` /
+   * `max-w-[440px]`, so the two can't drift apart.
+   *
+   * `height` is here (not just the edges) because the cutout is now a rounded
+   * rect drawn at the sheet's real size, so it needs the full box.
    */
-  const [panelX, setPanelX] = useState<{ left: number; right: number } | null>(
-    null,
-  )
+  const [panelBox, setPanelBox] = useState<{
+    left: number
+    right: number
+    height: number
+  } | null>(null)
   useEffect(() => {
     if (!open) return
     const el = panelRef.current
@@ -149,7 +157,7 @@ export function UniverseReadPanel({
     const measure = () => {
       setSkyH(Math.max(0, window.innerHeight - el.offsetHeight))
       const r = el.getBoundingClientRect()
-      setPanelX({ left: r.left, right: r.right })
+      setPanelBox({ left: r.left, right: r.right, height: el.offsetHeight })
     }
     measure()
     const ro = new ResizeObserver(measure)
@@ -257,20 +265,30 @@ export function UniverseReadPanel({
           screen in a single pass, so the tone is identical from the very top
           down past the sheet's shoulders to the bottom corners.
 
-          The cutout is a U-shaped polygon rather than a smaller rectangle
-          because the sheet is flush with the bottom edge: trace the viewport,
-          then dive down its left side, across its top, and back up its right.
-          `clip-path` doesn't move the background origin, so the grid stays
-          locked to the viewport on both sides of the cut and the lines continue
-          straight past the sheet without a jog.
+          The sheet is removed with a two-layer MASK, not a `clip-path` polygon.
+          A polygon can only draw straight edges, so its cutout met the sheet's
+          20px rounded top corners with a square corner — leaving a small notch
+          of texture sitting outside the rounded border. The mask cuts the exact
+          same rounded rect the sheet itself is drawn with, so the texture now
+          follows the curve into the corner.
 
-          Clipping (not just stopping above) is what keeps this off the sheet
-          itself, whose chrome carries its own texture — the one place a second
-          grid really would double up.
+          How it composites: layer 1 is the sheet-shaped hole, layer 2 covers the
+          viewport, and `mask-composite: exclude` subtracts the first from the
+          second. (`-webkit-mask-composite: xor` is the same operation under
+          Safari's older name; both are set, and the `Webkit*` longhands are
+          repeated because Safari doesn't always honour the unprefixed ones.)
+
+          Like `clip-path`, a mask doesn't move the background origin — so the
+          grid stays locked to the viewport on both sides of the cut and the lines
+          continue straight past the sheet without a jog.
+
+          Masking (rather than just stopping above the sheet) is what keeps this
+          off the sheet itself, whose chrome carries its own texture — the one
+          place a second grid really would double up.
 
           Background is transparent: the field supplies the black. Any fill here
           would hide the avatar rather than veil it. */}
-      {open && skyH > 0 && panelX && (
+      {open && skyH > 0 && panelBox && (
         <div
           aria-hidden="true"
           className="pointer-events-none fixed inset-0 z-[95]"
@@ -278,17 +296,14 @@ export function UniverseReadPanel({
             backgroundImage: ledTexture(
               LED_FIELD_GRID_ALPHA,
               LED_FIELD_STRIPE_BOOST,
+              LED_FIELD_STRIPE_MID_SCALE,
             ),
-            clipPath: `polygon(
-              0 0,
-              100% 0,
-              100% 100%,
-              ${panelX.right}px 100%,
-              ${panelX.right}px ${skyH + dragY}px,
-              ${panelX.left}px ${skyH + dragY}px,
-              ${panelX.left}px 100%,
-              0 100%
-            )`,
+            ...sheetHoleMask({
+              left: panelBox.left,
+              top: skyH + dragY,
+              width: panelBox.right - panelBox.left,
+              height: panelBox.height - dragY,
+            }),
           }}
         />
       )}
@@ -323,7 +338,9 @@ export function UniverseReadPanel({
           borderTop: `1px solid ${accent}`,
           borderLeft: `1px solid ${accent}`,
           borderRight: `1px solid ${accent}`,
-          borderRadius: "20px 20px 0 0",
+          // Shared with the LED overlay's cutout so the two can't drift and
+          // leave a square notch of texture outside this curve.
+          borderRadius: `${LED_SHEET_RADIUS_PX}px ${LED_SHEET_RADIUS_PX}px 0 0`,
           // A soft bloom of the marker's color along the panel's top edge.
           boxShadow: `0 -1px 24px ${accent}40`,
           transform: open ? `translateY(${dragY}px)` : "translateY(110%)",
