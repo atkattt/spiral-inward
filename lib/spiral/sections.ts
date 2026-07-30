@@ -23,21 +23,30 @@ export const SECTION_ORDER = [
 export type SectionKey = (typeof SECTION_ORDER)[number]
 
 // One accent per section, used by ALL of its reads once answered (and by the
-// CURRENT ring on its major). Temperature arc: warm/light early, cooling
-// through the middle, deeper and more saturated late, ending in the dim
-// violet of the hidden room.
+// CURRENT ring on its major). This is a high-chroma palette: bright leads and
+// primaries rather than the previous muted pastel arc.
+//
+// Contrast note — these are drawn as small glyphs on a near-black sky
+// (#050505), and minor reads render at fontSize 10. Ratios vs that sky:
+//   growth 18.1 · the weight 13.3 · the surface 11.7 · mind 11.6 ·
+//   the fire 9.3 · the hunger 8.6 · the private 7.1 · the heart 5.3 ·
+//   the center 3.6 · the taste 2.9 · cluster 1.6
+// The last three sit below the 4.5 text threshold; cluster is effectively
+// invisible unaided. They are kept at the exact values requested, and the
+// glyphs carry a colored text-shadow glow which lifts them in practice — see
+// the marker renderer in components/circle/spiral-universe.tsx.
 export const SECTION_COLORS: Record<SectionKey, string> = {
-  "the surface": "#e8c06a", // light gold — the mask you were handed
-  "the heart": "#e8907a", // warm peach-coral — the inner tide
-  mind: "#8ecfdc", // pale cool cyan — the weather of thought
-  "the fire": "#e0704e", // burnt ember-orange — the drive
-  "the taste": "#d8a86e", // warm amber — what you reach for
-  growth: "#5fd0a8", // sea green — where you widen
-  "the weight": "#6e8fa8", // slate steel-blue — what you carry
-  "the center": "#e8dc9a", // pale sun-gold — the core self
-  cluster: "#4a90d8", // deep saturated blue — the knot of planets
-  "the hunger": "#c85a8a", // deep magenta-rose — the pull of the nodes
-  "the private": "#7a6f9e", // dim violet — the hidden room
+  "the surface": "#90CAF9", // light sky blue — the mask you were handed
+  "the heart": "#FF0A54", // hot crimson-rose — the inner tide
+  mind: "#95D600", // acid yellow-green — the weather of thought
+  "the fire": "#FF9505", // bright orange — the drive
+  "the taste": "#613DC1", // deep indigo-violet — what you reach for
+  growth: "#E4FF1A", // electric chartreuse — where you widen
+  "the weight": "#BDD4E7", // pale blue-grey — what you carry
+  "the center": "#D00000", // pure deep red — the core self
+  cluster: "#390099", // near-black violet — the knot of planets
+  "the hunger": "#44BBA4", // teal-green — the pull of the nodes
+  "the private": "#3FAE2A", // leaf green — the hidden room
 }
 
 /** Normalize a raw fragments.section value; unknown/null → null (caller
