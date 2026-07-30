@@ -29,7 +29,7 @@ export type SectionKey = (typeof SECTION_ORDER)[number]
 // Contrast note — these are drawn as small glyphs on a near-black sky
 // (#050505), and minor reads render at fontSize 10. Ratios vs that sky:
 //   growth 18.1 · the weight 13.3 · the surface 11.7 · mind 11.6 ·
-//   the fire 9.3 · the hunger 8.6 · the private 7.1 · the heart 5.3 ·
+//   the fire 9.3 · the hunger 8.6 · the heart 7.6 · the private 7.1 ·
 //   the center 3.6 · the taste 2.9 · cluster 1.6
 // The last three sit below the 4.5 text threshold; cluster is effectively
 // invisible unaided. They are kept at the exact values requested, and the
@@ -37,7 +37,7 @@ export type SectionKey = (typeof SECTION_ORDER)[number]
 // the marker renderer in components/circle/spiral-universe.tsx.
 export const SECTION_COLORS: Record<SectionKey, string> = {
   "the surface": "#90CAF9", // light sky blue — the mask you were handed
-  "the heart": "#FF0A54", // hot crimson-rose — the inner tide
+  "the heart": "#FB6F92", // soft rose-pink — the inner tide
   mind: "#95D600", // acid yellow-green — the weather of thought
   "the fire": "#FF9505", // bright orange — the drive
   "the taste": "#613DC1", // deep indigo-violet — what you reach for
