@@ -449,6 +449,9 @@ export default function TerminalOnboarding({
           // give it a glassmorphism feel while the grey tint keeps the text
           // readable against the moving background behind it.
           width: "100%",
+          // Anchors the LED overlay below, which is absolutely positioned to
+          // this card's box rather than the page.
+          position: "relative",
           // Subtract the page's vertical padding (main uses py-6 = 48px total)
           // so the card fits fully inside the viewport and the flex parent can
           // center it vertically instead of overflowing / pinning to the top.
@@ -797,6 +800,40 @@ export default function TerminalOnboarding({
             enter the spiral ⏎
           </button>
         )}
+
+        {/* LED/LCD screen overlay, the same treatment the /self avatar and the
+            landing creature wear: RGB sub-pixel stripes + a scanline grid over
+            the content, plus an inner vignette so the card reads as a lit panel
+            rather than plain frosted glass.
+
+            Values are SelfCreature's, with two deliberate choices:
+            - The sub-pixel pitch stays FIXED at 2px, as it is there, so this
+              large panel reads as the same physical screen as the small avatar.
+            - Scanline alpha is 0.10 rather than the avatar's 0.16. The avatar
+              is pure glyph art, but this card holds 16px body copy and a live
+              text input, and the darker grid started to fringe the type.
+
+            Last child so it sits above the log and inputs; pointerEvents none
+            keeps the date field and buttons clickable through it. The card's
+            own `overflow: hidden` clips it to the rounded corners. */}
+        <div
+          aria-hidden="true"
+          style={{
+            position: "absolute",
+            inset: 0,
+            pointerEvents: "none",
+            borderRadius: 28,
+            boxShadow: "inset 0 0 60px 14px rgba(0,0,0,0.45)",
+            backgroundImage: `repeating-linear-gradient(to right,
+                rgba(255,60,60,.05) 0 .67px,
+                rgba(60,255,120,.05) .67px 1.33px,
+                rgba(80,120,255,.05) 1.33px 2px),
+              repeating-linear-gradient(to bottom,
+                transparent 0 1px, rgba(0,0,0,0.1) 1px 2px),
+              repeating-linear-gradient(to right,
+                transparent 0 1px, rgba(0,0,0,0.1) 1px 2px)`,
+          }}
+        />
       </div>
 
       <style>{`
