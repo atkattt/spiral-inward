@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react"
 import SwirlCloudSky from "@/components/SwirlCloudSky"
 import AsciiRippleSky from "@/components/AsciiRippleSky"
 import { StoryReadCards } from "@/components/threshold/story-read-cards"
+import { ledOverlayStyle } from "@/lib/ui/glass"
 import {
   BIRTH_DATA_KEY,
   BIRTH_NORMALIZED_KEY,
@@ -369,6 +370,33 @@ export default function ThresholdScreen({ onEnter }: { onEnter: () => void }) {
             {/* One continuous ASCII line: mutates while the chart reads, then
                 resolves cell-by-cell into "READY?" — no remount, no jump. */}
             <AsciiMorphDisplay ready={ready && !error} />
+
+            {/* LED screen overlay, the same treatment the /self avatar, the
+                landing creature, the onboarding card and the story cards wear.
+
+                gridAlpha stays at the shared default 0.16 (rather than the 0.10
+                used on the copy-bearing panels) because this is pure glyph art
+                like the avatar, so the denser grid reads as a real screen with
+                no body text for it to fringe.
+
+                The vignette is the tight small-disc pairing: at 168px the wide
+                spread used on the big panels would darken straight through the
+                "READY?" letters instead of hugging the rim.
+
+                Placed last so it sits above the ASCII, and after the spinning
+                ring — that ring is at inset:-2 to cover the 2px border, while
+                this overlay's inset:0 resolves against the padding box, so the
+                grid stops short of the lit outline and leaves it crisp. */}
+            <div
+              aria-hidden="true"
+              style={ledOverlayStyle({
+                // Half of the 168px box, so the grid is clipped to a full circle.
+                radius: 84,
+                vignetteBlur: 18,
+                vignetteSpread: 4,
+                vignetteAlpha: 0.5,
+              })}
+            />
           </div>
 
           {/* Cycling status line — shows the loading stages, or the error
