@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { STORY_SECTIONS, type StorySection } from "@/components/threshold/story-content"
-import { glassPanelStyle } from "@/lib/ui/glass"
+import { glassPanelStyle, ledOverlayStyle } from "@/lib/ui/glass"
 
 /**
  * StoryReadCards
@@ -197,6 +197,8 @@ function StoryReadCard({
         // all three can't drift apart again (this file used to own its own copy
         // of these values).
         ...glassPanelStyle,
+        // Anchors the LED overlay below to this card rather than the page.
+        position: "relative",
         padding: "16px 18px 18px",
         fontFamily: MONO,
         // Only the cards after the first animate in; the first is already on
@@ -249,6 +251,26 @@ function StoryReadCard({
           />
         )}
       </div>
+
+      {/* LED screen overlay, the same treatment the /self avatar, the landing
+          creature and the onboarding card wear. Last child so it sits above the
+          typed body and the blinking cursor.
+
+          gridAlpha 0.10 (not the avatar's 0.16) because these cards hold 12px
+          pixel-font copy that the darker grid fringes, and the vignette is
+          tightened from the onboarding card's 60/14 since these panels are a
+          few hundred px tall — at full spread the darkening reached well into
+          the text instead of staying at the edges. */}
+      <div
+        aria-hidden="true"
+        style={ledOverlayStyle({
+          radius: 13,
+          gridAlpha: 0.1,
+          vignetteBlur: 28,
+          vignetteSpread: 6,
+          vignetteAlpha: 0.34,
+        })}
+      />
 
       <style>{`@keyframes srcBlink { 50% { opacity: 0; } }`}</style>
     </div>

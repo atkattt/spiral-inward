@@ -72,3 +72,61 @@ export const glassPanelStyle: CSSProperties = {
  * the primitive's default max-w-[calc(100%-2rem)].
  */
 export const GLASS_DIALOG_WIDTH = "max-w-[300px] sm:max-w-xs"
+
+/**
+ * The LED/LCD screen overlay: RGB sub-pixel stripes + a scanline grid laid OVER
+ * a panel's content, with an inner vignette so the surface reads as a lit screen
+ * rather than flat glass or plain text.
+ *
+ * Values come from SelfCreature's `lcd` branch, which is the reference. Shared
+ * as a function because this is now on four surfaces (the /self avatar, the
+ * landing creature, the onboarding card, the story cards) and the glass values
+ * right above already taught us what happens when such a set gets copied per
+ * call site: the copies drift and the panels go off-brand.
+ *
+ * The sub-pixel pitch is FIXED at 2px, exactly as in the original. That is
+ * deliberate and should not be scaled per panel: a real screen has one physical
+ * pixel size, so a small avatar and a full-height card must show the same pitch
+ * to read as the same device.
+ *
+ * Apply to an `absolute inset-0` element that is the LAST child of a
+ * `position: relative` panel, with `aria-hidden` (it is pure decoration) and
+ * `pointerEvents: "none"` so anything interactive underneath still receives
+ * clicks. Note `inset: 0` resolves against the PADDING box, so a 1px glass
+ * border stays crisp outside the grid instead of being overprinted.
+ */
+export function ledOverlayStyle({
+  radius,
+  gridAlpha = 0.16,
+  vignetteBlur = 60,
+  vignetteSpread = 14,
+  vignetteAlpha = 0.45,
+}: {
+  /** Match the panel's own border radius so the grid follows its corners. */
+  radius: number
+  /**
+   * Scanline darkness. 0.16 is the avatar's value and suits pure glyph art;
+   * drop to ~0.10 on panels holding real body copy, where the darker grid
+   * starts to fringe the type.
+   */
+  gridAlpha?: number
+  vignetteBlur?: number
+  vignetteSpread?: number
+  vignetteAlpha?: number
+}): CSSProperties {
+  return {
+    position: "absolute",
+    inset: 0,
+    pointerEvents: "none",
+    borderRadius: radius,
+    boxShadow: `inset 0 0 ${vignetteBlur}px ${vignetteSpread}px rgba(0,0,0,${vignetteAlpha})`,
+    backgroundImage: `repeating-linear-gradient(to right,
+        rgba(255,60,60,.05) 0 .67px,
+        rgba(60,255,120,.05) .67px 1.33px,
+        rgba(80,120,255,.05) 1.33px 2px),
+      repeating-linear-gradient(to bottom,
+        transparent 0 1px, rgba(0,0,0,${gridAlpha}) 1px 2px),
+      repeating-linear-gradient(to right,
+        transparent 0 1px, rgba(0,0,0,${gridAlpha}) 1px 2px)`,
+  }
+}

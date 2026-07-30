@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, useCallback } from "react";
+import { ledOverlayStyle } from "@/lib/ui/glass";
 
 /**
  * TerminalOnboarding
@@ -816,24 +817,7 @@ export default function TerminalOnboarding({
             Last child so it sits above the log and inputs; pointerEvents none
             keeps the date field and buttons clickable through it. The card's
             own `overflow: hidden` clips it to the rounded corners. */}
-        <div
-          aria-hidden="true"
-          style={{
-            position: "absolute",
-            inset: 0,
-            pointerEvents: "none",
-            borderRadius: 28,
-            boxShadow: "inset 0 0 60px 14px rgba(0,0,0,0.45)",
-            backgroundImage: `repeating-linear-gradient(to right,
-                rgba(255,60,60,.05) 0 .67px,
-                rgba(60,255,120,.05) .67px 1.33px,
-                rgba(80,120,255,.05) 1.33px 2px),
-              repeating-linear-gradient(to bottom,
-                transparent 0 1px, rgba(0,0,0,0.1) 1px 2px),
-              repeating-linear-gradient(to right,
-                transparent 0 1px, rgba(0,0,0,0.1) 1px 2px)`,
-          }}
-        />
+        <div aria-hidden="true" style={ledOverlayStyle({ radius: 28, gridAlpha: 0.1 })} />
       </div>
 
       <style>{`
