@@ -205,6 +205,44 @@ export function UniverseReadPanel({
         }}
       />
 
+      {/* The same LED texture again, this time IN FRONT of the creature, so the
+          avatar sits behind the screen's glass instead of floating on top of it.
+
+          Why a second layer instead of the field doing both: the stage creature
+          is rendered inside the panel (z-[90]), which outranks the field
+          (z-[70]), so the field can only ever pass behind it.
+
+          Two things make this safe rather than a repeat of the double-grid
+          moiré that made the creature drop its own `lcd`:
+
+          1. It is anchored to the viewport at top:0, exactly like the field, so
+             both grids share an origin and the 2px lines land in the same
+             columns/rows. One continuous screen, no seam where they meet, no
+             beat pattern where they overlap.
+          2. It is a SIBLING of the panel, never a child. The panel is
+             transformed (translateY), and a transform makes it the containing
+             block for fixed descendants — a `fixed inset-0` layer inside it
+             would resolve against the panel box and drift with the slide,
+             breaking the shared origin.
+
+          Height stops at the panel's top edge (+dragY, so it tracks the
+          swipe-to-dismiss gesture) rather than filling the viewport. Covering
+          the panel too would lay this grid over the sheet's own chrome texture,
+          which is the one place a second grid really would double up.
+
+          Background is transparent: the field already supplies the black. Any
+          fill here would hide the avatar rather than veil it. */}
+      {open && skyH > 0 && (
+        <div
+          aria-hidden="true"
+          className="pointer-events-none fixed inset-x-0 top-0 z-[95]"
+          style={{
+            height: skyH + dragY,
+            backgroundImage: ledTexture(LED_FIELD_GRID_ALPHA),
+          }}
+        />
+      )}
+
       {/* Panel */}
       <div
         ref={panelRef}
