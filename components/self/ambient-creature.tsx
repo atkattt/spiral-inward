@@ -215,6 +215,7 @@ export default function AmbientCreature({ size = 200 }: { size?: number }) {
   }, [size])
 
   const disc = size * 0.75
+  const lcd = lcdVignette(disc)
 
   return (
     <div
@@ -243,7 +244,10 @@ export default function AmbientCreature({ size = 200 }: { size?: number }) {
           className="flex items-center justify-center"
           style={{
             color: NEUTRAL,
-            filter: `drop-shadow(0 0 10px ${NEUTRAL})`,
+            // The 0.4px soften is SelfCreature's `lcd` treatment: it makes the
+            // upscaled glyph pixels sit under the LED grid instead of looking
+            // like sharp text laid on top of it. The glow is unaffected.
+            filter: `drop-shadow(0 0 10px ${NEUTRAL}) blur(0.4px)`,
             animation: "ambientBlink 5.4s ease-in-out infinite",
             width: disc,
             height: disc,
@@ -276,8 +280,47 @@ export default function AmbientCreature({ size = 200 }: { size?: number }) {
           </div>
         </div>
       </div>
+
+      {/* The same LED/LCD screen overlay the /self avatar wears: RGB sub-pixel
+          stripes + a scanline grid floated ABOVE the glyphs, carrying an inner
+          vignette so the disc reads as a lit panel rather than flat text.
+
+          Ported value-for-value from SelfCreature's `lcd` branch (this
+          component composes faces itself and doesn't render SelfCreature, so
+          the props couldn't just be forwarded). The sub-pixel pitch is FIXED at
+          2px there on purpose, so a small avatar reads as the same physical
+          screen as a large one; only the vignette blur/spread scale. */}
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full"
+        style={{
+          width: disc,
+          height: disc,
+          boxShadow: `inset 0 0 ${lcd.blur}px ${lcd.spread}px rgba(0,0,0,0.6)`,
+          backgroundImage: `repeating-linear-gradient(to right,
+              rgba(255,60,60,.05) 0 .67px,
+              rgba(60,255,120,.05) .67px 1.33px,
+              rgba(80,120,255,.05) 1.33px 2px),
+            repeating-linear-gradient(to bottom,
+              transparent 0 1px, rgba(0,0,0,${LCD_GRID_ALPHA}) 1px 2px),
+            repeating-linear-gradient(to right,
+              transparent 0 1px, rgba(0,0,0,${LCD_GRID_ALPHA}) 1px 2px)`,
+        }}
+      />
     </div>
   )
+}
+
+/** Scanline darkness, matching SelfCreature's circular-avatar value. */
+const LCD_GRID_ALPHA = 0.16
+
+/**
+ * Vignette falloff for a circular screen, using SelfCreature's curve:
+ * 0 at ~150px discs (the spiral center) up to 1 at ~480px.
+ */
+function lcdVignette(discPx: number) {
+  const t = Math.max(0, Math.min(1, (discPx - 150) / 330))
+  return { blur: 18 + t * 42, spread: 4 + t * 10 }
 }
 
 const AMBIENT_KEYFRAMES = `
