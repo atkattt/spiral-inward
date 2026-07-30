@@ -23,7 +23,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { GLASS_DIALOG_WIDTH, glassPanelStyle } from "@/lib/ui/glass"
+import { GLASS_DIALOG_WIDTH, glassPanelStyle, ledOverlayStyle } from "@/lib/ui/glass"
 import { bondsUnlockState, type BondsUnlock } from "@/lib/circle/bonds-unlock"
 import { milestoneLevel, type AvatarSignals } from "@/lib/self/avatar-slots"
 import { sectionClearProgress } from "@/lib/self/lenses"
@@ -2405,6 +2405,12 @@ export function SpiralUniverse({
           >
             keep reading
           </button>
+
+          {/* Same LED overlay as the add-person dialog. Applied here too
+              because these two popups can appear from the same spiral view
+              seconds apart, so a grid on one and bare glass on the other would
+              read as a bug rather than a choice. */}
+          <div aria-hidden="true" style={ledOverlayStyle({ radius: 13, gridAlpha: 0.1, vignetteBlur: 28, vignetteSpread: 6, vignetteAlpha: 0.34 })} />
         </DialogContent>
       </Dialog>
     </div>

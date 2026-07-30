@@ -9,7 +9,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { toast } from "@/components/ui/terminal-toast"
-import { GLASS_DIALOG_WIDTH, glassPanelStyle } from "@/lib/ui/glass"
+import { GLASS_DIALOG_WIDTH, glassPanelStyle, ledOverlayStyle } from "@/lib/ui/glass"
 
 // The onboarding terminal's visual language, mirrored here so adding a
 // person feels like the same ritual as entering your own details:
@@ -408,6 +408,29 @@ export function AddPersonDialog({
             {isPending ? "placing star…" : "add to circle ⏎"}
           </button>
         </form>
+
+        {/* LED screen overlay, the same treatment the /self avatar, the landing
+            creature, the onboarding card, the story cards and the threshold
+            disc wear.
+
+            gridAlpha 0.10 and the tightened vignette match the other panels
+            that carry real copy: this one holds 11px pixel labels and live
+            inputs, which the avatar's denser 0.16 grid visibly fringes.
+
+            Two things this relies on:
+            - DialogContent is already `fixed`, so it anchors this absolute
+              child without needing position: relative added.
+            - It has no overflow-hidden, so the radius must be set explicitly to
+              glassPanelStyle's 13 or the grid would square off the corners.
+
+            pointerEvents: none (from the helper) is load-bearing here rather
+            than cosmetic — this panel is a whole form, so the overlay sits over
+            every input and the AM/PM pills. Verified typable through it.
+
+            Note this is the last child written here but not the last DOM child:
+            the primitive appends its own close X after children, so that button
+            paints above the grid. Left as is, since it keeps the X crisp. */}
+        <div aria-hidden="true" style={ledOverlayStyle({ radius: 13, gridAlpha: 0.1, vignetteBlur: 28, vignetteSpread: 6, vignetteAlpha: 0.34 })} />
       </DialogContent>
     </Dialog>
   )
