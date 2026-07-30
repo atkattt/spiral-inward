@@ -181,7 +181,21 @@ export function UniverseReadPanel({
         role="dialog"
         aria-modal="true"
         aria-hidden={!open}
-        className="fixed inset-x-0 bottom-0 z-50 mx-auto w-full max-w-[440px]"
+        /**
+         * `inset-x-2` (not `inset-x-0 w-full`) so the 1px side borders are
+         * always INSIDE the viewport.
+         *
+         * max-w-[440px] only clamps above 440px, so on every phone the panel
+         * was exactly viewport-width — its left border sat in pixel column 0
+         * and its right border in the very last column. Measured at 322px:
+         * left 0, right 322, clientWidth 322. No overflow, but the right
+         * border landed on the final sub-pixel boundary and rounded away, so
+         * the outline looked cut off down that side while the left survived.
+         *
+         * An 8px gutter each side costs almost no reading width and keeps the
+         * bottom flush, so it still reads as a sheet rising from the edge.
+         */
+        className="fixed inset-x-2 bottom-0 z-50 mx-auto w-auto max-w-[440px]"
         style={{
           background: "#070707",
           // Explicit sides (not the `border` shorthand) so React doesn't see

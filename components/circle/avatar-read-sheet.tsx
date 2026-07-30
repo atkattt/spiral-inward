@@ -101,7 +101,12 @@ export function AvatarReadSheet({
         onTouchStart={onTouchStart}
         onTouchMove={onTouchMove}
         onTouchEnd={onTouchEnd}
-        className="absolute inset-x-0 bottom-0 mx-auto flex max-h-[88dvh] w-full max-w-md flex-col overflow-hidden rounded-t-2xl"
+        /* inset-x-2 rather than inset-x-0 + w-full, for the same reason as
+           UniverseReadPanel: max-w-md only clamps above 448px, so on a phone
+           this sheet was exactly viewport-width and its 1px side borders sat in
+           the outermost pixel columns — the right one rounded away and the
+           outline looked cut off down that edge. */
+        className="absolute inset-x-2 bottom-0 mx-auto flex max-h-[88dvh] w-auto max-w-md flex-col overflow-hidden rounded-t-2xl"
         style={{
           background: "#070707",
           borderTop: "1px solid #1a1a1a",
