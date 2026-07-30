@@ -516,6 +516,7 @@ const SelfCreature = forwardRef<SelfCreatureHandle, Props>(function SelfCreature
 
   // LED/LCD geometry — the sub-pixel pitch stays FIXED at 2px so a small
   // avatar reads as the same screen as the big one; only shape/falloff change.
+  // (GRID_OVERSCAN / GRID_FADE_MASK live at module scope, below the component.)
   const lcdMetrics = useMemo(() => {
     const boardW = size * 0.62
     const boardH = size * 0.5
@@ -683,35 +684,144 @@ const SelfCreature = forwardRef<SelfCreatureHandle, Props>(function SelfCreature
         </div>
       </div>
 
-      {/* lcd: RGB sub-pixel stripes + scanline grid floated ABOVE the glyphs,
-          carrying the inner vignette. Never captures taps. */}
+      {/* lcd: RGB sub-pixel stripes + scanline grid floated ABOVE the glyphs.
+          Never captures taps.
+
+          The grid and the vignette are TWO elements on purpose. They used to be
+          one, but the grid's own box edge was visible as a hard rectangle around
+          the avatar (most obvious on desktop, where the default no-lcdSize
+          branch draws a 6px-radius board rather than a circle): the RGB stripes
+          are slightly lighter than the sky, so the board read as a faint panel
+          floating on black.
+
+          Fixing that means extending the grid well past the avatar and fading it
+          out — but the vignette is an INSET box-shadow, so if it rode the same
+          enlarged box it would start its falloff at the new outer edge and go
+          soft and off-center over the glyphs. The user's constraint was to leave
+          the vignette alone, so it keeps the exact original geometry below and
+          only the grid grows. */}
       {lcd && (
-        <div
-          aria-hidden="true"
-          style={{
-            position: "absolute",
-            left: "50%",
-            top: "50%",
-            width: lcdMetrics.w,
-            height: lcdMetrics.h,
-            transform: "translate(-50%, -50%)",
-            pointerEvents: "none",
-            borderRadius: lcdMetrics.radius,
-            boxShadow: `inset 0 0 ${lcdMetrics.blur}px ${lcdMetrics.spread}px rgba(0,0,0,0.6)`,
-            backgroundImage: `repeating-linear-gradient(to right,
-                rgba(255,60,60,.05) 0 .67px,
-                rgba(60,255,120,.05) .67px 1.33px,
-                rgba(80,120,255,.05) 1.33px 2px),
-              repeating-linear-gradient(to bottom,
-                transparent 0 1px, rgba(0,0,0,${lcdMetrics.gridAlpha}) 1px 2px),
-              repeating-linear-gradient(to right,
-                transparent 0 1px, rgba(0,0,0,${lcdMetrics.gridAlpha}) 1px 2px)`,
-          }}
-        />
+        <>
+          {/* The grid, oversized and dissolved into the sky at its rim.
+
+              GRID_OVERSCAN 1.36 puts the box edge ~18% of the avatar's width
+              outside the old bounds on each side, so the edge sits far away from
+              any glyph. The radial mask then takes the grid to fully transparent
+              by 95% of that enlarged box — i.e. it is already nothing well
+              before the edge, so there is no rectangle left to see at any
+              viewport width.
+
+              Because the mask percentages resolve against the ENLARGED box,
+              `black 55%` keeps the grid at full strength across the central
+              ~75% of the original board — which comfortably covers the glyphs —
+              and only the empty margin beyond them is where it falls off.
+
+              The 2px sub-pixel pitch is untouched: the gradients below are
+              byte-identical to the originals, and pitch is defined in absolute
+              px, so scaling the CONTAINER cannot stretch it. */}
+          <div
+            aria-hidden="true"
+            style={{
+              position: "absolute",
+              left: "50%",
+              top: "50%",
+              width: `calc(${lcdMetrics.w}px * ${GRID_OVERSCAN})`,
+              height: `calc(${lcdMetrics.h}px * ${GRID_OVERSCAN})`,
+              transform: "translate(-50%, -50%)",
+              pointerEvents: "none",
+              maskImage: GRID_FADE_MASK,
+              WebkitMaskImage: GRID_FADE_MASK,
+              backgroundImage: `repeating-linear-gradient(to right,
+                  rgba(255,60,60,.05) 0 .67px,
+                  rgba(60,255,120,.05) .67px 1.33px,
+                  rgba(80,120,255,.05) 1.33px 2px),
+                repeating-linear-gradient(to bottom,
+                  transparent 0 1px, rgba(0,0,0,${lcdMetrics.gridAlpha}) 1px 2px),
+                repeating-linear-gradient(to right,
+                  transparent 0 1px, rgba(0,0,0,${lcdMetrics.gridAlpha}) 1px 2px)`,
+            }}
+          />
+          {/* The vignette, at the original size/radius/blur/spread/alpha.
+              Carries no background of its own.
+
+              It needs its own fade. An inset shadow is drawn only INSIDE its
+              box and is at full strength right at the edge (spread pushes it
+              inward, blur softens toward the centre), so the box boundary is a
+              hard step: grid darkened by 0.6 on the inside, grid untouched on
+              the outside. While the grid stopped at this same boundary that
+              step was the rectangle being complained about; once the grid
+              extended past it, the step became a crisp outline instead.
+
+              Masking it converts that step into a gradual falloff. The shadow's
+              own numbers are untouched — this only dissolves where it ENDS, so
+              it no longer terminates against brighter grid. */}
+          <div
+            aria-hidden="true"
+            style={{
+              position: "absolute",
+              left: "50%",
+              top: "50%",
+              width: lcdMetrics.w,
+              height: lcdMetrics.h,
+              transform: "translate(-50%, -50%)",
+              pointerEvents: "none",
+              borderRadius: lcdMetrics.radius,
+              boxShadow: `inset 0 0 ${lcdMetrics.blur}px ${lcdMetrics.spread}px rgba(0,0,0,0.6)`,
+              maskImage: VIGNETTE_FADE_MASK,
+              WebkitMaskImage: VIGNETTE_FADE_MASK,
+            }}
+          />
+        </>
       )}
     </div>
   )
 })
+
+/**
+ * How much larger the LED grid's container is than the screen it represents,
+ * so its box edge falls well outside the glyphs. 1.36 = ~36% larger overall,
+ * i.e. ~18% of the avatar's width of extra margin on each side.
+ *
+ * This scales the CONTAINER only. The grid's 2px sub-pixel pitch is expressed
+ * in absolute px inside `repeating-linear-gradient`, so it is unaffected.
+ */
+const GRID_OVERSCAN = 1.36
+
+/**
+ * Fades the grid to nothing before it reaches its own edge, so there is no hard
+ * rectangle (or circle) anywhere on the sky.
+ *
+ * Full strength out to 55% and gone by 95% of the oversized box. Combined with
+ * GRID_OVERSCAN that means the glyph area sits entirely in the solid part while
+ * the falloff happens across the empty margin around it.
+ */
+/**
+ * `farthest-side` is load-bearing, not decoration.
+ *
+ * A bare `radial-gradient(ellipse at center, ...)` defaults to farthest-CORNER,
+ * so its 100% is the distance to the corner and the ellipse passes through the
+ * corners. The straight edges then sit at only ~71% of the gradient's extent, so
+ * a `transparent 95%` stop was still ~60% OPAQUE along the flat sides — the grid
+ * never actually reached zero at the edge it was supposed to dissolve before,
+ * and the rectangle stayed visible.
+ *
+ * farthest-side makes 100% mean the edge midpoints, which is what these
+ * percentages are written to describe.
+ */
+const GRID_FADE_MASK =
+  "radial-gradient(ellipse farthest-side at center, #000 55%, transparent 95%)"
+
+/**
+ * Dissolves the vignette's outer boundary so it doesn't end in a hard step
+ * against the (now larger) grid. Reaches transparent at 100% — exactly the box
+ * edge — so the darkening ramps out instead of being cut off.
+ *
+ * Starts fading later than the grid's mask (72% vs 55%) so the shadow keeps its
+ * strength through the region where it actually reads, and only the last sliver
+ * before the edge is softened.
+ */
+const VIGNETTE_FADE_MASK =
+  "radial-gradient(ellipse farthest-side at center, #000 60%, transparent 100%)"
 
 /** A few faint glyph motes drifting within the circle. */
 function Dust({ color, size }: { color: string; size: number }) {
