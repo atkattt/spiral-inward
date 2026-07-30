@@ -28,8 +28,8 @@ export type SectionKey = (typeof SECTION_ORDER)[number]
 //
 // Contrast note — these are drawn as small glyphs on a near-black sky
 // (#050505), and minor reads render at fontSize 10. Ratios vs that sky:
-//   growth 18.1 · the weight 13.3 · the surface 11.7 · mind 11.6 ·
-//   the fire 9.3 · the hunger 8.6 · the heart 7.6 · the private 7.1 ·
+//   the weight 13.3 · the surface 11.6 · mind 11.5 · the fire 9.3 ·
+//   the hunger 8.6 · the heart 7.6 · the private 7.1 · growth 6.5 ·
 //   the center 3.6 · the taste 2.9 · cluster 1.6
 // The last three sit below the 4.5 text threshold; cluster is effectively
 // invisible unaided. They are kept at the exact values requested, and the
@@ -41,7 +41,7 @@ export const SECTION_COLORS: Record<SectionKey, string> = {
   mind: "#95D600", // acid yellow-green — the weather of thought
   "the fire": "#FF9505", // bright orange — the drive
   "the taste": "#613DC1", // deep indigo-violet — what you reach for
-  growth: "#E4FF1A", // electric chartreuse — where you widen
+  growth: "#858AE3", // periwinkle violet-blue — where you widen
   "the weight": "#BDD4E7", // pale blue-grey — what you carry
   "the center": "#D00000", // pure deep red — the core self
   cluster: "#390099", // near-black violet — the knot of planets
