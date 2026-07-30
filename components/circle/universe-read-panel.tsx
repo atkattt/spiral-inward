@@ -389,7 +389,7 @@ export function UniverseReadPanel({
         >
           {/* title — the fragment's authored lowercase title, as written */}
           <div
-            className="mb-2 text-[13px] lowercase tracking-[2px]"
+            className="mb-2 text-[20px] font-bold lowercase tracking-[2px]"
             style={{ color: accent, textShadow: `0 0 12px ${accent}55` }}
           >
             {data?.title}
@@ -407,7 +407,7 @@ export function UniverseReadPanel({
           )}
           {/* body — the full authored text, present immediately */}
           <div
-            className="whitespace-pre-wrap text-[15px] leading-relaxed"
+            className="whitespace-pre-wrap text-[14px] leading-relaxed"
             style={{ color: "#cfcbc1", minHeight: 54 }}
           >
             {data?.body}
