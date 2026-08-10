@@ -674,6 +674,14 @@ export function SpiralUniverse({
     stageCreatureRef.current?.react(kind)
   }, [reactMood])
 
+  /**
+   * The signature being WORN right now: set only when a read is agreed to, so
+   * the creature answers with that read's face, then cleared when it lets go.
+   * Declared here (above closePanel) because that handler clears it.
+   */
+  const [wornSignature, setWornSignature] = useState<string | null>(null)
+  const clearWornSignature = useCallback(() => setWornSignature(null), [])
+
   const closePanel = useCallback(() => {
     if (reactTimer.current) clearTimeout(reactTimer.current)
     setPanel(null)
@@ -816,13 +824,6 @@ export function SpiralUniverse({
     () => deriveLibrary(fragments, responseById),
     [fragments, responseById],
   )
-
-  /**
-   * The signature being WORN right now: set only when a read is agreed to, so
-   * the creature answers with that read's face, then cleared when it lets go.
-   */
-  const [wornSignature, setWornSignature] = useState<string | null>(null)
-  const clearWornSignature = useCallback(() => setWornSignature(null), [])
 
   // Disc size follows the creature's structure (see discSizeFor), from the
   // same signals SelfCreature renders.

@@ -84,7 +84,10 @@ export type SignatureExpr = SignatureFace & {
 const TONE_FACES: Record<SignatureTone, SignatureFace> = {
   // hearts — the read the user recognised as warmth
   warm: { eyes: "♡ ♡", eyesAlt: "♥ ♥", mouth: "ᗜ", fallbackEyes: "◕ ◕" },
-  tender: { eyes: "◔ ◔", eyesAlt: "◕ ◕", mouth: "◡", fallbackEyes: "◕ ◕" },
+  // NB `◕ ◕` is an EYES palette member, so it is used only as a FALLBACK, never
+  // as a worn glyph — a signature that resolved to the resting face would make
+  // the unlock invisible. `◔ ◔` / `◒ ◒` are both outside the palette.
+  tender: { eyes: "◔ ◔", eyesAlt: "◒ ◒", mouth: "◡", fallbackEyes: "◕ ◕" },
   gentle: { eyes: "◠ ◠", eyesAlt: "◡ ◡", mouth: "‿", fallbackEyes: "• •" },
   hopeful: { eyes: "✧ ✧", eyesAlt: "✦ ✦", mouth: "▽", fallbackEyes: "◉ ◉" },
   direct: { eyes: "■ ■", eyesAlt: "□ □", mouth: "‗", fallbackEyes: "● ●" },
