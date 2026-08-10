@@ -30,6 +30,7 @@ import {
   dispositionOf,
   milestoneLevel,
   probePalettes,
+  makeGlyphProbe,
   slotIndices,
   unlocksAtLevel,
   withFallback,
@@ -37,6 +38,12 @@ import {
   type MilestoneSlot,
   type PaletteFallbacks,
 } from "@/lib/self/avatar-slots"
+import {
+  BLUSH_GLYPH,
+  SIGNATURE_EYE_GLYPHS,
+  computeVariantLevel,
+  type SignatureExpr,
+} from "@/lib/self/signatures"
 import { ledTexture } from "@/lib/ui/led"
 
 /**
@@ -57,6 +64,14 @@ import { ledTexture } from "@/lib/ui/led"
  *
  *   AURA grows one permanent glyph per written answer, placed deterministically
  *   from the user's seed, so the same user always regrows the same halo.
+ *
+ *   SIGNATURES (lib/self/signatures.ts) override the eyes + mouth for a beat.
+ *   Every read carries a face derived from its tone; agreeing to the read adds
+ *   that face to the `library`, and passing its id as `signature` makes the
+ *   creature WEAR it — so the being visibly answers the read it just accepted.
+ *   With `ambient` on, an idle creature occasionally remembers a random face
+ *   from its library, which is how range becomes legible at the spiral center.
+ *   The creature can only ever wear what `library` contains.
  *
  * Reactions stay imperative so the reads UI can fire them without prop churn:
  *   const ref = useRef<SelfCreatureHandle>(null)
@@ -96,6 +111,16 @@ type Props = {
   lcd?: boolean
   /** Diameter of the lit screen, for avatars that sit in a circular bezel. */
   lcdSize?: number
+  /** every signature the user has unlocked by agreeing (deriveLibrary) */
+  library?: SignatureExpr[]
+  /** id of a library signature to WEAR right now — the read just agreed to */
+  signature?: string | null
+  /** how long a worn signature holds before it lets go */
+  signatureHoldMs?: number
+  /** let an idle creature drift through its library (the spiral center) */
+  ambient?: boolean
+  /** fired when a worn signature finishes, so callers can clear their state */
+  onSignatureEnd?: () => void
 }
 
 const REACTION_MS = 600
@@ -107,6 +132,17 @@ const MORPH_MS = 600
 const ACCRETE_MS = 800
 /** How long a living-material flicker holds before reverting. */
 const FLICKER_MS = 300
+/** Default hold for a worn signature (the read screen's "yes"). */
+const SIGNATURE_HOLD_MS = 1600
+/** How long an ambient remembered face is worn. */
+const DRIFT_HOLD_MS = 2000
+/** Idle gap before the creature remembers another face (min + random extra). */
+const DRIFT_GAP_MIN_MS = 6000
+const DRIFT_GAP_RANDOM_MS = 8000
+/** Eye-alternation period for a pulsing (family level 1+) signature. */
+const PULSE_MS = 620
+/** Stable identity so an omitted `library` prop never re-triggers the effects. */
+const EMPTY_LIBRARY: SignatureExpr[] = []
 
 /**
  * The avatar's OWN font — deliberately not the app's pixel font.
@@ -235,6 +271,11 @@ const SelfCreature = forwardRef<SelfCreatureHandle, Props>(function SelfCreature
     ember = false,
     lcd = false,
     lcdSize,
+    library,
+    signature = null,
+    signatureHoldMs = SIGNATURE_HOLD_MS,
+    ambient = false,
+    onSignatureEnd,
   },
   ref,
 ) {
@@ -297,6 +338,130 @@ const SelfCreature = forwardRef<SelfCreatureHandle, Props>(function SelfCreature
       cancelled = true
     }
   }, [])
+
+  // ---- signatures: the face a read left behind ------------------------------
+  // `worn` is whichever signature is on the face right now, and why: a read the
+  // user just agreed to ("signature"), or an idle memory ("drift"). A read
+  // always outranks a memory.
+  const lib = library ?? EMPTY_LIBRARY
+  const [worn, setWorn] = useState<{
+    sig: SignatureExpr
+    source: "signature" | "drift"
+  } | null>(null)
+  const wornTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const sigEndRef = useRef(onSignatureEnd)
+  sigEndRef.current = onSignatureEnd
+
+  const libById = useMemo(() => {
+    const m = new Map<string, SignatureExpr>()
+    for (const s of lib) m.set(s.id, s)
+    return m
+  }, [lib])
+
+  // Signature glyphs live outside the probed palettes, so they get their own
+  // probe: anything this platform can't draw falls back to the palette-proven
+  // eyes the signature names.
+  const [badGlyphs, setBadGlyphs] = useState<Set<string> | null>(null)
+  useEffect(() => {
+    let cancelled = false
+    const run = () => {
+      if (cancelled) return
+      const probe = makeGlyphProbe(MONO)
+      const bad = new Set<string>()
+      for (const g of SIGNATURE_EYE_GLYPHS) if (!probe(g)) bad.add(g)
+      setBadGlyphs(bad)
+      if (bad.size > 0) {
+        console.log(
+          "[v0] signature glyphs unsupported on this platform:",
+          [...bad].join(" "),
+        )
+      }
+    }
+    const fonts = (document as Document & { fonts?: FontFaceSet }).fonts
+    if (fonts?.ready) void fonts.ready.then(run)
+    else run()
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  // Wear the read the user just agreed to, for `signatureHoldMs`.
+  useEffect(() => {
+    if (!signature) return
+    const sig = libById.get(signature)
+    if (!sig) return
+    if (wornTimer.current) clearTimeout(wornTimer.current)
+    setWorn({ sig, source: "signature" })
+    wornTimer.current = setTimeout(() => {
+      setWorn(null)
+      sigEndRef.current?.()
+    }, signatureHoldMs)
+  }, [signature, libById, signatureHoldMs])
+
+  // AMBIENT DRIFT — an idle creature occasionally remembers one of its faces.
+  // Only while genuinely idle: never over a worn read, a reaction, or an
+  // evolution, and never for a creature with nothing collected yet.
+  const idleForDrift =
+    ambient &&
+    !reduceMotion &&
+    lib.length > 0 &&
+    !reaction &&
+    evolvePhase === "idle" &&
+    (worn === null || worn.source === "drift")
+  useEffect(() => {
+    if (!idleForDrift) return
+    let cancelled = false
+    let hold: ReturnType<typeof setTimeout> | null = null
+    const schedule = (): ReturnType<typeof setTimeout> =>
+      setTimeout(
+        () => {
+          if (cancelled) return
+          const sig = lib[Math.floor(Math.random() * lib.length)]
+          setWorn({ sig, source: "drift" })
+          hold = setTimeout(() => {
+            if (cancelled) return
+            setWorn(null)
+            gap = schedule()
+          }, DRIFT_HOLD_MS)
+        },
+        DRIFT_GAP_MIN_MS + Math.random() * DRIFT_GAP_RANDOM_MS,
+      )
+    let gap = schedule()
+    return () => {
+      cancelled = true
+      clearTimeout(gap)
+      if (hold) clearTimeout(hold)
+    }
+  }, [idleForDrift, lib])
+
+  // A worn read outranks a memory: drop the memory the moment one arrives.
+  useEffect(() => {
+    if (!signature) return
+    setWorn((w) => (w?.source === "drift" ? null : w))
+  }, [signature])
+
+  useEffect(
+    () => () => {
+      if (wornTimer.current) clearTimeout(wornTimer.current)
+    },
+    [],
+  )
+
+  /** 0 = as authored, 1 = pulsing, 2 = pulsing + blush. */
+  const variantLevel = worn ? computeVariantLevel(lib, worn.sig.family) : 0
+
+  // The pulse alternates the eyes on a slow timer rather than a rAF loop — the
+  // rest of this component animates through CSS/timers and re-renders rarely.
+  const [pulseOn, setPulseOn] = useState(false)
+  const pulsing = variantLevel >= 1 && !reduceMotion
+  useEffect(() => {
+    if (!pulsing) {
+      setPulseOn(false)
+      return
+    }
+    const t = setInterval(() => setPulseOn((p) => !p), PULSE_MS)
+    return () => clearInterval(t)
+  }, [pulsing])
 
   // ---- imperative reactions ------------------------------------------------
   const flickerOnce = (slots: MilestoneSlot[], count: number) => {
@@ -470,9 +635,40 @@ const SelfCreature = forwardRef<SelfCreatureHandle, Props>(function SelfCreature
   const sidesIndex = withFallback(fallbacks?.sides ?? null, drawnIndex("sides"))
   const earsIndex = withFallback(fallbacks?.ears ?? null, drawnIndex("ears"))
 
-  // The blink overrides eye disposition AND eye mutation entirely.
-  const eyes = blinking ? BLINK_EYES : EYES[eyesIndex]
-  const mouth = MOUTH[mouthIndex]
+  /**
+   * THE FACE, in precedence order:
+   *   blink      — always wins, even over a worn signature (it has to; a face
+   *                that can't close its eyes stops reading as alive)
+   *   signature  — the read just agreed to, or an idle memory of one
+   *   disposition— the resting face from the palettes
+   * A pulsing signature (family level 1+) alternates with its variant eyes.
+   */
+  const wornEyesRaw = worn
+    ? pulseOn
+      ? worn.sig.eyesAlt
+      : worn.sig.eyes
+    : null
+  // Fall back to palette-proven eyes when the platform can't draw the glyph.
+  const wornEyes =
+    wornEyesRaw !== null && badGlyphs?.has(wornEyesRaw)
+      ? worn!.sig.fallbackEyes
+      : wornEyesRaw
+
+  const eyes = blinking ? BLINK_EYES : (wornEyes ?? EYES[eyesIndex])
+  const mouth = worn ? worn.sig.mouth : MOUTH[mouthIndex]
+  // Blush appears once a family is deep enough (level 2), flanking the eyes.
+  const blush = worn !== null && variantLevel >= 2
+
+  /**
+   * Morph keys drive SlotGlyph's fade. Putting the WORN signature (not the
+   * pulse) in the key means the face dissolves when a signature arrives or
+   * lets go, while the pulse alternation swaps instantly — a pulse that faded
+   * every 620ms would read as a stutter, not a heartbeat.
+   * Worn keys are negative so they can never collide with a palette index.
+   */
+  const wornKey = worn ? -(lib.findIndex((s) => s.id === worn.sig.id) + 2) : 0
+  const eyesMorphKey = worn ? wornKey : eyesIndex
+  const mouthMorphKey = worn ? wornKey : mouthIndex
   const [sideL, sideR] = SIDES[sidesIndex]
   const [earL, earR] = EARS[earsIndex]
 
@@ -564,7 +760,14 @@ const SelfCreature = forwardRef<SelfCreatureHandle, Props>(function SelfCreature
           alignItems: "center",
           justifyContent: "center",
           opacity: artOpacity,
-          filter: `drop-shadow(0 0 10px ${color}) blur(${artBlur}px)`,
+          /**
+           * A pulsing signature swells the glow in step with its eye
+           * alternation. Driven by the existing `filter .5s ease` transition
+           * below rather than a keyframe animation, because `animation` on this
+           * element is already spoken for (reaction / breathe / ember) and a
+           * second animation touching `filter` would fight this inline value.
+           */
+          filter: `drop-shadow(0 0 ${pulsing && pulseOn ? 17 : 10}px ${color}) blur(${artBlur}px)`,
           transform: `scale(${evolveScale})`,
           transformOrigin: "center",
           transition: evolving
@@ -651,12 +854,19 @@ const SelfCreature = forwardRef<SelfCreatureHandle, Props>(function SelfCreature
               style={glyphStyle}
               animate={!reduceMotion}
             />
+            {/* blush — a deep family (level 2) shows beside the eyes */}
+            {blush && (
+              <span style={{ ...glyphStyle, opacity: 0.7 }}>{BLUSH_GLYPH}</span>
+            )}
             <SlotGlyph
               glyph={eyes}
-              morphKey={eyesIndex}
+              morphKey={eyesMorphKey}
               style={glyphStyle}
               animate={!reduceMotion}
             />
+            {blush && (
+              <span style={{ ...glyphStyle, opacity: 0.7 }}>{BLUSH_GLYPH}</span>
+            )}
             <SlotGlyph
               glyph={sideR}
               morphKey={sidesIndex}
@@ -676,7 +886,7 @@ const SelfCreature = forwardRef<SelfCreatureHandle, Props>(function SelfCreature
             >
               <SlotGlyph
                 glyph={mouth}
-                morphKey={mouthIndex}
+                morphKey={mouthMorphKey}
                 style={glyphStyle}
                 animate={!reduceMotion}
               />

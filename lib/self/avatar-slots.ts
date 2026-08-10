@@ -329,7 +329,9 @@ function charsOf(entry: string | GlyphPair): string[] {
  * proves nothing — we RENDER each char and compare its pixels to the
  * "missing glyph" box and to blank.
  */
-function makeGlyphProbe(fontFamily: string): (entry: string | GlyphPair) => boolean {
+export function makeGlyphProbe(
+  fontFamily: string,
+): (entry: string | GlyphPair) => boolean {
   if (typeof document === "undefined") return () => true
   const canvas = document.createElement("canvas")
   canvas.width = 32

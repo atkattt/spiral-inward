@@ -11,6 +11,7 @@ import {
 } from "react"
 import type { Mood } from "@/components/circle/SelfAvatar"
 import SelfCreature, { type SelfCreatureHandle } from "@/components/self/self-creature"
+import { deriveLibrary } from "@/lib/self/signatures"
 import type { Person, Relationship } from "@/lib/db/schema"
 import { useSpiral } from "@/components/spiral/spiral-provider"
 import { makePersonRead, type Read } from "@/lib/spiral/reads"
@@ -678,6 +679,8 @@ export function SpiralUniverse({
     setPanel(null)
     setReactMood(null)
     setReactColor(null)
+    // Never carry a read's face out of the read that gave it.
+    setWornSignature(null)
   }, [])
 
   // THE SEQUENCE — fragments grouped by section (fixed order), each section's
@@ -800,6 +803,26 @@ export function SpiralUniverse({
       constellations: total,
     }
   }, [dispositionCounts, fragments, respondedIds, answerCount, lensRank])
+
+  /**
+   * THE SIGNATURE LIBRARY — the faces the creature has collected.
+   *
+   * Derived from exactly the same two inputs as the disposition above (the
+   * reads in the current sky + the shared verdict map), so it can never drift
+   * out of step with what the being is: one face per AGREED read, unlocked the
+   * moment the user says "yes, that's me". Nothing is stored.
+   */
+  const signatureLibrary = useMemo(
+    () => deriveLibrary(fragments, responseById),
+    [fragments, responseById],
+  )
+
+  /**
+   * The signature being WORN right now: set only when a read is agreed to, so
+   * the creature answers with that read's face, then cleared when it lets go.
+   */
+  const [wornSignature, setWornSignature] = useState<string | null>(null)
+  const clearWornSignature = useCallback(() => setWornSignature(null), [])
 
   // Disc size follows the creature's structure (see discSizeFor), from the
   // same signals SelfCreature renders.
@@ -1051,6 +1074,13 @@ export function SpiralUniverse({
         )
       }
       setReactMood(agreeIt ? "agree" : "disagree")
+      /**
+       * "Yes, that's me" unlocks this read's face AND wears it immediately —
+       * the library above already contains it on this same urgent frame,
+       * because responseById picks up `justAnswered` set just above. Saying no
+       * unlocks nothing, so the face stays as it was.
+       */
+      if (agreeIt) setWornSignature(current.read.id)
       const accent = current.data.accent ?? (agreeIt ? AGREE_COLOR : DISAGREE_COLOR)
       if (agreeIt) {
         // Absorbed: a saturated pulse — the accent pushed brighter — rides the
@@ -2097,6 +2127,11 @@ export function SpiralUniverse({
             size={creatureSize}
             lcd
             lcdSize={discSize}
+            /* At rest in its own sky, the self drifts through the faces it has
+               collected — so an explored self visibly has range and a new one
+               has none. */
+            library={signatureLibrary}
+            ambient
           />
         </div>
 
@@ -2326,6 +2361,13 @@ export function SpiralUniverse({
             seed={userId ?? "guest-journey"}
                   color={reactColor ?? panel.data.accent ?? NEUTRAL_COLOR}
                   size={Math.round(creatureSize * 3.375)}
+                  /* The read screen is where a face is EARNED: on "yes" the
+                     creature wears the signature of the read it just accepted.
+                     No ambient drift here — inside a read, the only face that
+                     should surface is that read's own. */
+                  library={signatureLibrary}
+                  signature={wornSignature}
+                  onSignatureEnd={clearWornSignature}
                   breatheDuration={activeMood.breatheDuration}
                   blinkMinMs={activeMood.blinkMinMs}
                   blinkMaxMs={activeMood.blinkMaxMs}
