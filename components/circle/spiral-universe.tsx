@@ -9,6 +9,7 @@ import {
   useRef,
   useState,
 } from "react"
+import { useRouter } from "next/navigation"
 import SelfCreature, { type SelfCreatureHandle } from "@/components/self/self-creature"
 import { deriveLibrary } from "@/lib/self/signatures"
 import type { Person, Relationship } from "@/lib/db/schema"
@@ -324,9 +325,8 @@ const READ_ARC_GAP = 46
 // Extra arc breathing room between one section's last read and the next
 // section's star, so sections read as distinct runs along the path.
 const SECTION_ARC_GAP = 86
-// The drawn spiral's tail: how much extra arc of sparse fog trails past the
-// last placed read before fading out (implying more beyond).
-const SPIRAL_TAIL_ARC = 150
+// (The old SPIRAL_TAIL_ARC is gone: the sparse fading tail past the last
+// placed read is now baked into the pinned SPIRAL_T_END literal.)
 
 /** Advance t along the spiral by `arc` world units (small Euler steps). */
 function advanceT(t: number, arc: number): number {
@@ -596,6 +596,7 @@ export function SpiralUniverse({
   // away from the object that was actually pressed.
   const downTargetRef = useRef<HTMLElement | null>(null)
 
+  const router = useRouter()
   const { agree, disagree, agreed, disagreed } = useSpiral()
 
   /**
@@ -1569,6 +1570,8 @@ export function SpiralUniverse({
   openReadRef.current = openRead
   const openPersonRef = useRef(openPerson)
   openPersonRef.current = openPerson
+  const routerRef = useRef(router)
+  routerRef.current = router
 
   // Camera bounds: the world origin may never drift further than this from the
   // viewport center (in world units), so the view always contains part of the
@@ -1676,18 +1679,19 @@ export function SpiralUniverse({
     return () => onBackChangeRef.current?.(null)
   }, [panelOpen, backToCircle])
 
-  // THE UNLOCK MOMENT — when the last read of a section is answered during
-  // this session (unlockedCount rises past its mount value), the next star
-  // blooms in further along the arm; the camera acknowledges with a gentle
-  // partial drift toward it (~40% of the way, no zoom), holds a beat while
-  // the flare/reveal plays, then settles back home. Skipped on mount so a
-  // returning user's rebuilt sky doesn't trigger a phantom drift.
-  const prevUnlockedRef = useRef<number | null>(null)
+  // THE COLLAPSE MOMENT — when a fully-answered pair collapses on return to
+  // the spiral (the star count rises past its mount value), the camera
+  // acknowledges the new star with a gentle partial drift toward it (~40% of
+  // the way, no zoom), holds a beat while the flare/reveal plays, then settles
+  // back home. Skipped on mount so a returning user's rebuilt sky doesn't
+  // trigger a phantom drift.
+  const prevStarsRef = useRef<number | null>(null)
   useEffect(() => {
-    const prev = prevUnlockedRef.current
-    prevUnlockedRef.current = unlockedCount
-    if (prev === null || unlockedCount <= prev) return
-    const star = sections[unlockedCount - 1]?.reads[0]
+    const count = journey.stars.length
+    const prev = prevStarsRef.current
+    prevStarsRef.current = count
+    if (prev === null || count <= prev) return
+    const star = journey.stars[count - 1]
     if (!star) return
     const driftTimer = setTimeout(() => {
       animateCam(() => {
@@ -1703,7 +1707,7 @@ export function SpiralUniverse({
       clearTimeout(driftTimer)
       clearTimeout(settleTimer)
     }
-  }, [unlockedCount, sections, animateCam, goHome])
+  }, [journey, animateCam, goHome])
 
   useEffect(() => {
     const stage = stageRef.current
@@ -1792,6 +1796,13 @@ export function SpiralUniverse({
       const type = objEl.dataset.obj
       const idx = Number(objEl.dataset.objIndex)
       if (Number.isNaN(idx)) return
+      // The center self: a tap on the creature opens its history. Handled
+      // first because it is the one object that isn't frontier-gated — the
+      // self is always reachable.
+      if (type === "self") {
+        routerRef.current.push("/history")
+        return
+      }
       // Locked objects (beyond the revealed frontier) can't be opened — the
       // user has to expand the frontier by answering reads first.
       if (type === "read") {
@@ -1906,8 +1917,6 @@ export function SpiralUniverse({
           prevReveal={prevRevealRef.current}
           monoFont={monoFont}
           visibleTEnd={visibleTEnd}
-          crawling={crawling}
-          initialTEnd={initialTEnd}
         />
 
         {/* Bonds — faint dashed lines between connected people, in world
@@ -1935,11 +1944,59 @@ export function SpiralUniverse({
           </svg>
         )}
 
-        {/* READ objects — section constellations: each unlocked section's
-            major star on the arm + its minor glyphs clustered around it. Tap
-            to open. Taps resolve in the stage's pointerup handler (via
-            data-obj), since pointer capture makes per-element onClick
-            unreliable here. */}
+        {/* COLLAPSED PAIRS — one star per fully-answered (lens, section) pair,
+            sitting where that constellation's run began. Deliberately NOT
+            interactive and NOT an overlay: no ring, no card, no pointer
+            target. It keeps the section's accent hue but wears the spiral's
+            own glow language (the same soft radial bloom + faint core the fog
+            glyphs use), so a finished chapter reads as part of the path
+            rather than a badge pinned on top of it. The answers themselves
+            live in /history, one tap away at the center. */}
+        {journey.stars.map((s) => (
+          <div
+            key={`star-${s.pairKey}`}
+            className="absolute"
+            style={{
+              left: px2(s.x),
+              top: px2(s.y),
+              transform: "translate(-50%, -50%)",
+              opacity: op6(s.r <= revealRadius ? 1 : 0),
+              transition: "opacity 1.2s ease",
+            }}
+            aria-hidden="true"
+          >
+            {/* soft bloom — the fog's glow, tinted to the section */}
+            <span
+              className="absolute rounded-full"
+              style={{
+                left: "50%",
+                top: "50%",
+                width: px2(26),
+                height: px2(26),
+                transform: "translate(-50%, -50%)",
+                background: `radial-gradient(circle, ${s.color}55 0%, ${s.color}22 45%, transparent 70%)`,
+              }}
+            />
+            {/* the star itself — a small bright core on the arm */}
+            <span
+              className="absolute rounded-full"
+              style={{
+                left: "50%",
+                top: "50%",
+                width: px2(3.5),
+                height: px2(3.5),
+                transform: "translate(-50%, -50%)",
+                background: s.color,
+                boxShadow: `0 0 5px ${s.color}, 0 0 11px ${s.color}99`,
+              }}
+            />
+          </div>
+        ))}
+
+        {/* READ objects — the ACTIVE section's constellation: its major star on
+            the arm + its minor glyphs clustered around it. Tap to open. Taps
+            resolve in the stage's pointerup handler (via data-obj), since
+            pointer capture makes per-element onClick unreliable here. */}
         {reads.map((r, i) => {
           // Marker states within a constellation:
           // CURRENT   — the active section's major only: section-color ring +
@@ -1953,8 +2010,9 @@ export function SpiralUniverse({
           const isCurrent = r.read.id === currentReadId
           const blooming = bloomId === r.read.id
           const isMajor = r.kind === "major"
-          // Subtle full-saturation glow once a constellation is 100% answered.
-          const sectionDone = fullyAnswered[r.sectionIdx]
+          // Subtle full-saturation glow once the constellation is 100%
+          // answered — the beat before it collapses into its star.
+          const sectionDone = activeDone
           const starColor = isCurrent || completed ? r.color : isMajor ? "#e8e4da" : "#8d8a80"
           // Shared glow: applied as text-shadow for minor sigils and converted
           // to a drop-shadow filter for the majors' SVG star.
@@ -2240,6 +2298,43 @@ export function SpiralUniverse({
             ambient
           />
         </div>
+
+        {/* THE CENTER TAP — the self opens its own history.
+
+            A sibling INSIDE the avatar wrapper, never a prop on it: the
+            wrapper carries the counter-scale transform (see the camera apply
+            loop) and stays pointer-events-none, so hanging a handler there
+            would either fight that transform or swallow stage gestures. This
+            child re-enables pointer events for exactly the disc's circle and
+            grows with it, since discSize swells as the creature evolves.
+
+            Tap resolution goes through the stage's data-obj dispatch, which
+            already distinguishes a tap from a drag/pinch — so panning across
+            the center never navigates. Keyboard activation is handled here
+            directly, with a visible focus ring for it. */}
+        <div
+          data-obj="self"
+          data-obj-index={0}
+          role="button"
+          tabIndex={0}
+          aria-label="Open your history of answered reads"
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault()
+              router.push("/history")
+            }
+          }}
+          className="pointer-events-auto absolute left-1/2 top-1/2 cursor-pointer rounded-full outline-none ring-offset-2 ring-offset-[#050505] focus-visible:ring-2"
+          style={{
+            width: discSize,
+            height: discSize,
+            transform: "translate(-50%, -50%)",
+            // @ts-expect-error -- CSS custom property for the focus ring hue
+            "--tw-ring-color": panel?.data.accent ?? NEUTRAL_COLOR,
+            transition:
+              "width .8s cubic-bezier(.3,.8,.3,1), height .8s cubic-bezier(.3,.8,.3,1)",
+          }}
+        />
 
         {/* ===== The name plate: a small pill straddling the disc's bottom rim,
             naming the self the way the app addresses it everywhere else.
@@ -2591,16 +2686,12 @@ const NebulaLayers = memo(function NebulaLayers({
   prevReveal,
   monoFont,
   visibleTEnd,
-  crawling,
-  initialTEnd,
 }: {
   glyphs: Glyph[]
   revealRadius: number
   prevReveal: number
   monoFont: string
   visibleTEnd: number
-  crawling: boolean
-  initialTEnd: number
 }) {
   const extFade = (t: number) => {
     const fadeStart = visibleTEnd - 0.12
@@ -2608,10 +2699,6 @@ const NebulaLayers = memo(function NebulaLayers({
     if (t >= visibleTEnd) return 0
     return 1 - (t - fadeStart) / 0.12
   }
-  const crawlDelay = (t: number) =>
-    crawling && t > initialTEnd
-      ? ((t - initialTEnd) / Math.max(0.01, GLYPH_T_END - initialTEnd)) * 2
-      : 0
   const justRevealed = (r: number) => r > prevReveal && r <= revealRadius
   const spreadFor = (r: number) =>
     justRevealed(r)
@@ -2620,7 +2707,7 @@ const NebulaLayers = memo(function NebulaLayers({
 
   return (
     <>
-      {/* ── Nebula, glow underlay ──────────────────────────────────────
+      {/* ── Nebula, glow underlay ───────────────���──────────────────────
           One layer holding a soft bloom blob per glyph. Lit (inside-
           frontier) blobs carry the cool moonlit glow; locked ones sit at
           opacity 0. PERF: these are radial-gradient discs — already soft,
@@ -2659,7 +2746,7 @@ const NebulaLayers = memo(function NebulaLayers({
                 transform: "translate(-50%, -50%)",
                 opacity: op6(lit ? Math.min(1, g.max * 2.4) * ext : 0),
                 transition: "opacity 1.2s ease",
-                transitionDelay: `${Math.max(spread, crawlDelay(g.t))}s`,
+                transitionDelay: `${spread}s`,
               }}
             />
           )
@@ -2722,7 +2809,7 @@ const NebulaLayers = memo(function NebulaLayers({
                         : Math.min(0.22, g.max * 0.6) * ext,
                     ),
                     transition: "color 1.2s ease, opacity 1.2s ease",
-                    transitionDelay: `${Math.max(spread, crawlDelay(g.t))}s`,
+                    transitionDelay: `${spread}s`,
                   }}
                 >
                   {g.char}
