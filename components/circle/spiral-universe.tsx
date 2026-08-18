@@ -829,6 +829,35 @@ export function SpiralUniverse({
     [fragments, responseById],
   )
 
+  // TEMPORARY INSTRUMENTATION — ambient drift diagnosis. Remove after reading.
+  // In an effect (not inline) so it prints once per change, not once per render.
+  useEffect(() => {
+    const agreedIds = [...responseById.entries()]
+      .filter(([, v]) => v === "agree")
+      .map(([id]) => id)
+    const fragmentIds = new Set(fragments.map((f) => f.id))
+    // The join deriveLibrary actually performs: an agreed id only produces a
+    // face if that fragment is ALSO in `fragments`. This split is what
+    // separates "no agreements yet" from "agreements dropped by the lens gate".
+    const agreedInSky = agreedIds.filter((id) => fragmentIds.has(id))
+    const agreedNotInSky = agreedIds.filter((id) => !fragmentIds.has(id))
+    console.log("[v0] ---- ambient drift diagnosis ----")
+    console.log("[v0] lib.length:", signatureLibrary.length)
+    console.log("[v0] responseById agree count:", agreedIds.length)
+    console.log("[v0] fragments reaching deriveLibrary:", fragments.length)
+    console.log("[v0] agreed AND in fragments (become faces):", agreedInSky.length)
+    console.log(
+      "[v0] agreed but NOT in fragments (dropped by join):",
+      agreedNotInSky.length,
+      agreedNotInSky.slice(0, 8),
+    )
+    console.log("[v0] guest:", guest, "| responseById total:", responseById.size)
+    console.log(
+      "[v0] drift gate needs lib.length > 0 =>",
+      signatureLibrary.length > 0 ? "PASSES" : "FAILS",
+    )
+  }, [signatureLibrary, responseById, fragments, guest])
+
   // Disc size follows the creature's structure (see discSizeFor), from the
   // same signals SelfCreature renders.
   const discSize = discSizeFor(
