@@ -96,15 +96,17 @@ const TAP_SLOP = 6
  */
 
 /**
- * Zoom floor, raised from 0.4 to clear the STAR RING.
+ * Zoom floor, raised from 0.4 to keep the collapsed stars clear of the avatar.
  *
- * The avatar disc is counter-scaled (constant screen size), so its WORLD
- * radius grows as 120/scale. At 0.4 that reaches r=300 and swallows the whole
- * ring of collapsed stars at STAR_RING_R. The ring stays clear while
- * scale >= 120/(STAR_RING_R - 13) = 0.569.
+ * The avatar disc is counter-scaled (constant screen size), so its WORLD radius
+ * grows as 120/scale. At 0.4 that reaches r=300, which swallowed the collapsed
+ * stars when they lived on a ring at r=224. They now sit in the CORNER_SLOTS at
+ * r≈306-353, so the floor is no longer what protects them — at 0.57 the disc
+ * reaches only 210 and the nearest slot still clears it by 96px.
  *
- * Nothing is lost by raising it: at 0.57 the visible world radius is ~321,
- * still past the drawn spiral edge (MAX_R * SPIRAL_T_END ≈ 297).
+ * Nothing is lost by keeping it here: at 0.57 the visible world radius is ~321,
+ * still past the drawn spiral edge (MAX_R * SPIRAL_T_END ≈ 297), and every
+ * corner slot is on screen.
  */
 const MIN_SCALE = 0.57
 // Capped at 2x: beyond that, CSS-scaled glyph text pixelates badly.
@@ -163,12 +165,12 @@ const GLYPH_T_END = 1.72
  * THE SPIRAL'S FIXED EDGE.
  *
  * The sky no longer grows, and it no longer has to be swept against the number
- * of completed sections: collapsed pairs live on the STAR RING, so the only
- * thing ever placed on the walk is the ONE active section, always from
- * READ_T_START_A. The bound is therefore just that section's own span — at
- * READ_ARC_GAP the measured worst case (13 reads) ends at t≈0.41, and even a
- * 20-read section would end near t≈0.55. Both sit inside this edge with room
- * to spare, and the rest is the fading tail.
+ * of completed sections: collapsed pairs live in the CORNER_SLOTS, so the only
+ * thing ever placed on the walk is the ONE active section, always anchored at
+ * ANCHOR_T. The bound is therefore just the anchor itself — the major read sits
+ * at t=0.4205 and the minors trail INWARD from there, so the run can never
+ * extend past the anchor no matter how long the section is. That is well inside
+ * this edge, and the rest is the fading tail.
  *
  * It is a LITERAL on purpose. The old value was derived from the walk's own
  * output (`sections[i].endT`), which made the drawn extent circular: place
@@ -345,29 +347,14 @@ type Glyph = {
 }
 
 // READ objects — the user's MATCHED FRAGMENTS (same pipeline as /self) —
-// beaded along the spiral arm as ONE LINEAR PATH in walking order: section 1's
-// major star, then its minis one after another ALONG the arm, then section 2's
-// star, its minis, and so on (section order: ascendant → moon → sun → knot →
-// nodes → chapter; see lib/spiral/sections.ts). No clusters — the sequence IS
-// the path, and the ringed cursor walks it one read at a time.
-// Where each strand's FIRST major star sits. Strand A (section 1) keeps the
-// original comfortable distance; strand B (section 2) opens closer to the
-// moon at the center — just outside the largest creature disc (~120px radius
-// at full accretion: r = MAX_R × 0.22 ≈ 106 world units) — so the second
-// major star greets the visitor near the heart of the spiral.
-const READ_T_START_A = 0.3
-/**
- * Strand B's opening, moved out from 0.22 to clear the creature.
- *
- * At 0.22 the first star sits at r = MAX_R * 0.22 = 105.6 — INSIDE the fully
- * accreted disc (rim at r=120), so it was drawn behind the creature. The badge
- * half-extent is 12, so the centre must reach 120 + 12 = 132: t >= 0.275.
- *
- * With one section live at a time this is latent (a 13-read run at
- * READ_ARC_GAP ends at t≈0.41, far inside strand A), but it is the correct
- * value the moment a pathological section overflows onto strand B.
- */
-const READ_T_START_B = 0.275
+// beaded along the spiral arm as ONE LINEAR PATH in walking order: the section's
+// major star at its anchor, then its minors one after another INWARD along the
+// same arm (section order: ascendant → moon → sun → knot → nodes → chapter; see
+// lib/spiral/sections.ts). No clusters — the sequence IS the path, and the
+// ringed cursor walks it one read at a time.
+// (READ_T_START_A/B are gone: sections no longer open at a fixed inner t and
+// grow outward. The major read is placed AT its anchor and the minors trail
+// back inward from it — see ANCHOR_T.)
 /**
  * Arc length (world units) between consecutive reads, lowered from 46 to 30.
  *
@@ -390,25 +377,72 @@ const READ_ARC_GAP = 30
 // only the active run is placed on the walk now — see the journey memo.)
 
 /**
- * THE STAR RING — where completed (lens, section) pairs go to live.
+ * THE TWO ANCHORS — where a section's MAJOR read sits.
  *
- * A ring, not a spiral position, precisely so that finishing a section cannot
- * displace the section being worked on. Both numbers are measured against the
- * 13-read run at SPIRAL_PHASE, not chosen by eye:
+ * Every section used to open at READ_T_START_A, so every section in the whole
+ * journey appeared in exactly the same place on screen: the work never moved,
+ * and the layout carried no sense of progress. Now the major read IS the anchor,
+ * and it alternates between two positions by pair index; the minors trail
+ * inward behind it along the same arm, in walk order.
  *
- *  - R = 224 clears the run's outer read (r=197) and the fully accreted
- *    creature disc (rim r=120), and is the largest radius that still keeps the
- *    ring inside the zoom floor's world view — it is what sets MIN_SCALE.
- *  - phase 112.8° is the angle whose worst slot sits 36.6px from any read,
- *    comfortably past the 26px marker clearance, and does so for EVERY slot
- *    count from 9 to 13 — so the one literal holds whether or not the deep lens
- *    has unlocked (11 pairs today, 12 with vedic_deep).
+ * One t, two arms. The strands are half a turn apart, so the same t on opposite
+ * arms is exactly 180° opposed — the alternation reads as switching sides, which
+ * is the entire point of having two:
  *
- * Unlike SPIRAL_PHASE these are already absolute angles: the ring is not
- * beaded on the spiral, so it must not be rotated by SPIRAL_PHASE again.
+ *   arm 0  -> world (-148,  137), screen x ≈  25 at 347×735  (LEFT)
+ *   arm π  -> world ( 148, -137), screen x ≈ 322 at 347×735  (RIGHT)
+ *
+ * t = 0.4205 is measured, not chosen by eye: it is the outermost value at which
+ * a full worst-case 13-read section still fits a 347×735 portrait viewport, and
+ * it holds all the way to n=16. The binding margin is 13.5px at 347×735,
+ * widening to 27.5 / 35.0 / 54.0px at 375×812, 390×844 and 428×926. The two
+ * sections never interfere — closest approach between them is 194px.
  */
-const STAR_RING_R = 224
-const STAR_RING_PHASE = (112.8 * Math.PI) / 180
+const ANCHOR_T = 0.4205
+const ANCHOR_ARMS = [0, Math.PI] as const
+
+/**
+ * CORNER SLOTS — where completed (lens, section) pairs go to live.
+ *
+ * Stars sit off the walk entirely, so finishing a section can never displace
+ * the section being worked on. They live in the four TRUE corner regions of the
+ * viewport, which is only possible because completed stars are exempt from the
+ * reveal frontier (see the stars render block): earned progress is not
+ * undiscovered territory, so it does not wait for the fog to arrive.
+ *
+ * Every literal is measured against the TIGHTEST target, 347×735:
+ *  - 14px inset from the viewport edge, so a star reads as sitting IN its
+ *    corner rather than clipped against it. Tightest edge margin is therefore
+ *    14px at 347×735, widening to 54.5px at 428×926.
+ *  - radii span 306–353, clearing the counter-scaled avatar disc by at least
+ *    96px even at the MIN_SCALE zoom floor, where the disc's WORLD radius
+ *    reaches 120/0.57 ≈ 210.
+ *  - nearest approach to any placed read is 112px and to any other slot 46px,
+ *    both well past MARKER_CLEAR_RADIUS. The "you" name plate is clear, and so
+ *    is addPersonPoint.
+ *
+ * These are absolute world coordinates, NOT beaded on the spiral, so they must
+ * not be rotated by SPIRAL_PHASE. Being world coordinates is also what makes
+ * them pan and scale with the sky instead of sticking to the screen.
+ *
+ * Ordered to ROTATE quadrants (NW → NE → SE → SW) rather than filling one
+ * corner at a time, so consecutive completions land on opposite sides and the
+ * four corners fill evenly. 11 slots covers every pair today; a 12th (vedic_deep)
+ * wraps, which is harmless — a wrapped star just shares a corner region.
+ */
+const CORNER_SLOTS: ReadonlyArray<{ x: number; y: number }> = [
+  { x: -146.5, y: -321 }, // NW outer
+  { x: 146.5, y: -321 }, // NE outer
+  { x: 146.5, y: 321 }, // SE outer
+  { x: -146.5, y: 321 }, // SW outer
+  { x: -100.5, y: -321 }, // NW along top
+  { x: 100.5, y: -321 }, // NE along top
+  { x: 100.5, y: 321 }, // SE along bottom
+  { x: -100.5, y: 321 }, // SW along bottom
+  { x: -146.5, y: -269 }, // NW up the side
+  { x: 146.5, y: -269 }, // NE up the side
+  { x: 146.5, y: 269 }, // SE up the side
+]
 
 /** Advance t along the spiral by `arc` world units (small Euler steps). */
 function advanceT(t: number, arc: number): number {
@@ -421,6 +455,24 @@ function advanceT(t: number, arc: number): number {
     remaining -= step
   }
   return cur
+}
+
+/**
+ * Retreat t INWARD along the spiral by `arc` world units — advanceT's inverse,
+ * used to trail a section's minor reads back from its anchor. Clamped at 0 so a
+ * pathologically long section piles up at the center instead of wrapping past
+ * it onto the far side of the spiral.
+ */
+function retreatT(t: number, arc: number): number {
+  let remaining = arc
+  let cur = t
+  while (remaining > 0 && cur > 0) {
+    const dsdt = MAX_R * Math.sqrt(1 + (2 * Math.PI * TURNS * cur) ** 2)
+    const step = Math.min(remaining, 12)
+    cur -= step / dsdt
+    remaining -= step
+  }
+  return Math.max(0, cur)
 }
 
 // PEOPLE drift in the dark between the strands. The first person added sits
@@ -917,49 +969,53 @@ export function SpiralUniverse({
      * the journey punished itself. Worse, the push was unbounded in the only
      * direction that mattered (outward), while SPIRAL_T_END is pinned.
      *
-     * Stars now live on their own fixed ring, so the active run ALWAYS opens
-     * at READ_T_START_A and always lands in the same place on screen. Progress
-     * is still legible — the ring fills up — but it no longer moves the work.
+     * Stars now live in the four CORNER REGIONS of the sky, so the active run
+     * always opens at one of the two fixed anchors and always lands in the same
+     * place on screen. Progress is still legible — the corners fill up — but it
+     * no longer moves the work.
      *
-     * Slots are indexed by pair index over the total pair count, so a star
-     * appears at the same angle every visit and never shifts as later sections
-     * complete. STAR_RING_PHASE is verified to clear the active run (and the
-     * creature's name plate) for every slot count from 9 to 13.
+     * Slots are indexed by PAIR INDEX, not by completion sequence, so a star
+     * appears in the same corner on every visit and never migrates as later
+     * sections complete. CORNER_SLOTS is ordered to rotate quadrants, so
+     * consecutive completions land on opposite sides of the sky.
      */
-    const slots = Math.max(1, pairs.length)
     const stars: StarNode[] = []
     for (const p of pairs) {
       if (!done[p.idx]) continue
-      const a = STAR_RING_PHASE + (p.idx * 2 * Math.PI) / slots
-      const x = STAR_RING_R * Math.cos(a)
-      const y = STAR_RING_R * Math.sin(a)
+      const slot = CORNER_SLOTS[p.idx % CORNER_SLOTS.length]
       stars.push({
         pairKey: p.pairKey,
         key: p.key,
         color: p.color,
-        x,
-        y,
-        r: STAR_RING_R,
+        x: slot.x,
+        y: slot.y,
+        r: Math.hypot(slot.x, slot.y),
       })
     }
 
-    // The active section's reads, as one unbroken run from the FIXED opening.
-    // Strand B is the overflow path only: a run long enough to pass
-    // SPIRAL_T_END from strand A restarts on the inner strand rather than
-    // trailing off past the drawn edge. At READ_ARC_GAP a 13-read run ends at
-    // t≈0.41, so in practice strand A always wins.
+    /**
+     * The active section, anchored by its MAJOR read.
+     *
+     * The major is placed AT the anchor and the minors trail INWARD behind it
+     * along the same arm, in walk order — so the anchor is the outermost read
+     * and index 0 of the run is the innermost. This is the inverse of the old
+     * scheme (which started at a fixed inner t and grew outward, letting the
+     * section's length decide where its major landed).
+     *
+     * The arm alternates by pair index, so consecutive sections sit on opposite
+     * sides of the sky. Placement is derived purely from `active.idx`, which is
+     * a stable property of the journey — so a section lands in the same place on
+     * every reload, and never depends on how much has been answered.
+     */
     const activeReads: PlacedRead[] = []
     if (active) {
-      const span = Math.max(0, active.frs.length - 1) * READ_ARC_GAP
-      const fitsA = advanceT(READ_T_START_A, span) <= SPIRAL_T_END
-      const slot = {
-        t: fitsA ? READ_T_START_A : READ_T_START_B,
-        phase: fitsA ? 0 : Math.PI,
-      }
-      let t = slot.t
+      const arm = ANCHOR_ARMS[active.idx % ANCHOR_ARMS.length]
+      // frs[0] is the major: it sits AT the anchor, and each following minor
+      // retreats one gap further inward along the same arm.
+      let t = ANCHOR_T
       active.frs.forEach((f, j) => {
-        if (j > 0) t = advanceT(t, READ_ARC_GAP)
-        const pt = spiralPoint(t, slot.phase)
+        if (j > 0) t = retreatT(t, READ_ARC_GAP)
+        const pt = spiralPoint(t, arm)
         activeReads.push({
           label: f.title,
           x: pt.x,
@@ -990,11 +1046,11 @@ export function SpiralUniverse({
     }
 
     // The revealed frontier has to contain everything actually drawn — which
-    // now means the active run alone. The star ring is deliberately NOT folded
-    // in: STAR_RING_R sits inside BASE_REVEAL_RADIUS by construction, so the
-    // ring is lit from the first visit, and feeding a constant through here
-    // would only pin the frontier open by a fixed 12px the moment any section
-    // completed.
+    // now means the active run alone. The corner stars are deliberately NOT
+    // folded in: they are exempt from the frontier entirely (see the stars
+    // render block), so feeding their r≈353 through here would blow the
+    // frontier wide open the moment one section completed and reveal the whole
+    // sky as a side effect of finishing a chapter.
     let endR = 0
     for (const r of activeReads) endR = Math.max(endR, r.r)
     return { stars, activeReads, active, endR }
@@ -2056,7 +2112,13 @@ export function SpiralUniverse({
               left: px2(s.x),
               top: px2(s.y),
               transform: "translate(-50%, -50%)",
-              opacity: op6(s.r <= revealRadius ? 1 : 0),
+              // EXEMPT from the reveal frontier, unlike every other object in
+              // the sky. A completed section is earned progress, not undiscovered
+              // territory — it should not blink out because it happens to sit
+              // past the fog's current reach. This is what lets the corner slots
+              // live at r≈306-353, far outside BASE_REVEAL_RADIUS. Fog and
+              // unreached reads keep progressive reveal untouched.
+              opacity: 1,
               transition: "opacity 1.2s ease",
             }}
             aria-hidden="true"
