@@ -27,7 +27,7 @@ import { GLASS_DIALOG_WIDTH, glassPanelStyle, ledOverlayStyle } from "@/lib/ui/g
 import { ledTexture } from "@/lib/ui/led"
 import { bondsUnlockState, type BondsUnlock } from "@/lib/circle/bonds-unlock"
 import { milestoneLevel, type AvatarSignals } from "@/lib/self/avatar-slots"
-import { sectionClearProgress } from "@/lib/self/lenses"
+import { lensOf, sectionClearProgress } from "@/lib/self/lenses"
 import { UniverseReadPanel, type PanelData } from "@/components/circle/universe-read-panel"
 import { saveRevealRadius } from "@/app/actions/progress"
 import { saveReadResponse } from "@/app/actions/self-reads"
@@ -146,6 +146,28 @@ const NEBULA_SAMPLES = 240
 const NEBULA_PHASES = 6
 const GLYPH_T_START = 0.04
 const GLYPH_T_END = 1.72
+
+/**
+ * THE SPIRAL'S FIXED EDGE.
+ *
+ * The sky no longer grows. This is the measured fixed point of the collapsing
+ * journey: with completed (lens, section) pairs collapsed to single stars and
+ * only ONE section's reads placed at a time, the continuous walk (stars at
+ * SECTION_ARC_GAP, then the active section's reads at READ_ARC_GAP) reaches
+ * this far along the curve in the worst observed case — 11 pairs with a
+ * 13-read section — plus the sparse fading tail.
+ *
+ * It is a LITERAL on purpose. The old value was derived from the walk's own
+ * output (`sections[i].endT`), which made the drawn extent circular: place
+ * fewer reads → sections end sooner → the spiral shrinks → less room to place
+ * reads. Pinning it breaks that loop, so the sky is the same size on every
+ * visit at every stage of the journey.
+ *
+ * Fog is still GENERATED out to GLYPH_T_END and fades to nothing past this
+ * edge (see extFade) — unchanged from the previous unextended state, where
+ * the visible end was 0.5313 against the same generated range.
+ */
+const SPIRAL_T_END = 0.6191
 
 // Monospace fog glyphs, weighted toward faint punctuation so bright marks
 // ( ✦ * @ ) only occasionally spark inside the cloud.
@@ -438,16 +460,39 @@ type PlacedRead = {
   sectionIdx: number
 }
 
-type SectionRun = {
+/**
+ * One (lens, section) PAIR — the unit of the journey.
+ *
+ * Sections repeat across lenses: "the heart" exists in both vedic and
+ * vedic_deep. The old walk grouped by section key alone, which merged them
+ * into a single run — so a completed constellation could be re-opened later
+ * when a deeper lens unlocked and injected new reads into it. The pair is the
+ * identity that collapses to a star, matching sectionClearProgress, which has
+ * always keyed by (lens, section).
+ */
+type PairRun = {
+  /** `${lens}\u0000${section}` — stable identity across renders */
+  pairKey: string
+  lens: string
   key: SectionKey
+  /** position in the fixed journey order (section order, then lens depth) */
   idx: number
   color: string
-  /** this section's reads in walking order (major first, then minis) */
-  reads: PlacedRead[]
-  /** spiral parameter of this section's last read */
-  endT: number
-  /** radius of this section's outermost read */
-  endR: number
+  frs: UniverseFragment[]
+}
+
+/**
+ * A fully-answered pair, collapsed to one star sitting at the position where
+ * that pair's run began. Carries no reads — the glyphs are gone; /history is
+ * where those answers live now.
+ */
+type StarNode = {
+  pairKey: string
+  key: SectionKey
+  color: string
+  x: number
+  y: number
+  r: number
 }
 type PlacedPerson = {
   person: Person
@@ -701,55 +746,139 @@ export function SpiralUniverse({
   // the panel content (authored title + body EXACTLY as written, trigger in
   // plain words, sigil) and a Read whose id IS the fragment id, so
   // agree/disagree persists to read_responses and /self shows the same state.
-  const sections = useMemo<SectionRun[]>(() => {
-    const groups = new Map<SectionKey, UniverseFragment[]>()
+  // ---- 1. THE PAIRS — grouping and order only, no geometry ----------------
+  const pairs = useMemo<PairRun[]>(() => {
+    const groups = new Map<
+      string,
+      { lens: string; key: SectionKey; frs: UniverseFragment[] }
+    >()
     for (const f of fragments) {
       // Explicit fragments.section wins; when null (column missing or not
       // backfilled) the section is DERIVED from the trigger type + planets,
       // so authored fragments spread across the journey instead of
       // collapsing into one section.
       const key = sectionFor(f.section, f.trigger_type, f.condition)
-      const g = groups.get(key)
-      if (g) g.push(f)
-      else groups.set(key, [f])
+      const lens = lensOf(f)
+      const pairKey = `${lens}\u0000${key}`
+      const g = groups.get(pairKey)
+      if (g) g.frs.push(f)
+      else groups.set(pairKey, { lens, key, frs: [f] })
     }
-    const present = SECTION_ORDER.filter((s) => groups.has(s))
+    // Fixed journey order: section order first, then lens depth — so vedic's
+    // "the heart" is walked before vedic_deep's.
+    const sectionPos = new Map(SECTION_ORDER.map((s, i) => [s, i]))
+    return [...groups.entries()]
+      .sort(([, a], [, b]) => {
+        const bySection =
+          (sectionPos.get(a.key) ?? 0) - (sectionPos.get(b.key) ?? 0)
+        if (bySection !== 0) return bySection
+        const byLens = (lensRank.get(a.lens) ?? 0) - (lensRank.get(b.lens) ?? 0)
+        if (byLens !== 0) return byLens
+        return a.lens < b.lens ? -1 : 1
+      })
+      .map(([pairKey, g], idx) => ({
+        pairKey,
+        lens: g.lens,
+        key: g.key,
+        idx,
+        color: SECTION_COLORS[g.key],
+        // THE STAR RULE (lib/spiral/sections.ts): weight desc, then lens depth
+        // desc, then id — so the major never depends on the order rows came
+        // back from the database.
+        frs: orderSection(g.frs, lensRank),
+      }))
+  }, [fragments, lensRank])
 
-    // BOTH STRANDS: sections alternate between the two spiral strands
-    // (even → strand 0, odd → strand π), each strand keeping its own arc
-    // cursor. This packs the walk into roughly HALF the radius the single-
-    // strand layout needed, so most of the initial spiral space fills up
-    // before the sky ever has to grow outward.
-    const cursors = [READ_T_START_A, READ_T_START_B]
-    const started = [false, false]
-    return present.map((key, idx) => {
-      // THE STAR RULE (lib/spiral/sections.ts): weight desc, then lens depth
-      // desc (a deeper lens's major is that constellation's next chapter and
-      // takes the star), then id — so the star never depends on the order rows
-      // came back from the database. The heaviest read still stands in when
-      // nothing in the section reaches MAJOR_WEIGHT.
-      const ordered = orderSection(groups.get(key)!, lensRank)
-      const color = SECTION_COLORS[key]
+  // ---- 2. THE COLLAPSE LATCH ---------------------------------------------
+  // Strict completion is read from a SNAPSHOT of the responded set, refreshed
+  // only while no read panel is open. Answering the last read of a section
+  // therefore does nothing to the sky until the panel closes and the user is
+  // back on the spiral — the constellation collapses on their RETURN, never
+  // under their hands mid-read.
+  const [collapseSnapshot, setCollapseSnapshot] =
+    useState<ReadonlySet<string>>(respondedIds)
+  useEffect(() => {
+    if (panel) return
+    setCollapseSnapshot((prev) => (prev === respondedIds ? prev : respondedIds))
+  }, [panel, respondedIds])
 
-      const strand = idx % 2
-      const phase = strand === 0 ? 0 : Math.PI
-      let t = cursors[strand]
-      if (started[strand]) t = advanceT(t, SECTION_ARC_GAP)
-      started[strand] = true
-      const reads = ordered.map((f, j) => {
+  // ---- 3. THE WALK — one continuous fill, strand A then strand B ---------
+  const journey = useMemo(() => {
+    // STRICT completion: every read of the pair answered, either verdict.
+    // Lens unlocks deliberately keep using the LENIENT sectionClearProgress
+    // rule (major + 2 minors) — only this star morph is strict.
+    const done = pairs.map((p) =>
+      p.frs.every((f) => collapseSnapshot.has(f.id)),
+    )
+    // Only ONE section is live at a time. Everything already complete is a
+    // star; everything after the active pair is not placed at all.
+    const activeIdx = done.findIndex((d) => !d)
+    const active = activeIdx === -1 ? null : pairs[activeIdx]
+
+    // A single cursor fills strand A (phase 0) and only then continues onto
+    // strand B (phase π) — NOT per-section alternation.
+    let strand = 0
+    let cursor = READ_T_START_A
+    let placed = false
+    /**
+     * Reserve a run spanning `arc` world-units from the cursor. A run is never
+     * split across strands: if the arc left on this strand can't hold the
+     * WHOLE run, the walk moves to the beginning of the next strand and starts
+     * the run there. `fits: false` means neither strand had room — the run is
+     * still placed (never dropped, which would soft-lock the journey) and
+     * simply overflows past the drawn edge.
+     */
+    const reserve = (arc: number): { t: number; phase: number; fits: boolean } => {
+      for (;;) {
+        const t0 = placed ? advanceT(cursor, SECTION_ARC_GAP) : cursor
+        if (advanceT(t0, arc) <= SPIRAL_T_END) {
+          return { t: t0, phase: strand === 0 ? 0 : Math.PI, fits: true }
+        }
+        if (strand === 1) return { t: t0, phase: Math.PI, fits: false }
+        strand = 1
+        cursor = READ_T_START_B
+        placed = false
+      }
+    }
+
+    // Stars first, in journey order. A star is a single point, so it needs no
+    // span of its own.
+    const stars: StarNode[] = []
+    for (const p of pairs) {
+      if (!done[p.idx]) continue
+      const slot = reserve(0)
+      const pt = spiralPoint(slot.t, slot.phase)
+      stars.push({
+        pairKey: p.pairKey,
+        key: p.key,
+        color: p.color,
+        x: pt.x,
+        y: pt.y,
+        r: Math.hypot(pt.x, pt.y),
+      })
+      cursor = slot.t
+      placed = true
+    }
+
+    // Then the active section's reads, as one unbroken run.
+    const activeReads: PlacedRead[] = []
+    if (active) {
+      const slot = reserve(Math.max(0, active.frs.length - 1) * READ_ARC_GAP)
+      let t = slot.t
+      active.frs.forEach((f, j) => {
         if (j > 0) t = advanceT(t, READ_ARC_GAP)
-        const pt = spiralPoint(t, phase)
-        return {
+        const pt = spiralPoint(t, slot.phase)
+        activeReads.push({
           label: f.title,
           x: pt.x,
           y: pt.y,
           r: Math.hypot(pt.x, pt.y),
-          color,
+          color: active.color,
           panel: {
             src: describeTrigger(f),
             title: f.title,
             body: f.body,
-            accent: color,
+            accent: active.color,
             symbol: symbolFor(f),
           },
           read: {
@@ -757,26 +886,25 @@ export function SpiralUniverse({
             category: "about-you" as const,
             text: f.body,
             // carried so history can tint each read with its section accent
-            section: key,
+            section: active.key,
           },
           mood: moodForRead(f.tone, f.life_domain),
           kind: j === 0 ? ("major" as const) : ("minor" as const),
           glyph: symbolFor(f),
-          sectionKey: key,
-          sectionIdx: idx,
-        }
+          sectionKey: active.key,
+          sectionIdx: active.idx,
+        })
       })
-      cursors[strand] = t
-      return {
-        key,
-        idx,
-        color,
-        reads,
-        endT: t,
-        endR: reads[reads.length - 1].r,
-      }
-    })
-  }, [fragments, lensRank])
+      cursor = t
+      placed = true
+    }
+
+    // The revealed frontier has to contain everything actually drawn.
+    let endR = 0
+    for (const s of stars) endR = Math.max(endR, s.r)
+    for (const r of activeReads) endR = Math.max(endR, r.r)
+    return { stars, activeReads, active, endR }
+  }, [pairs, collapseSnapshot])
 
   // The creature is composed from THE JOURNEY ITSELF, never from points:
   //   - structure (which slots exist) comes from the section-clear rule over
@@ -868,11 +996,15 @@ export function SpiralUniverse({
   // roughly half the disc at every stage.
   const creatureSize = Math.round(discSize * (248 / 188))
 
-  // Sections whose reads are ALL answered — the single source of truth for
-  // progression AND the full-saturation glow (see the marker renderer).
-  const fullyAnswered = useMemo(
-    () => sections.map((s) => s.reads.every((r) => respondedIds.has(r.read.id))),
-    [sections, respondedIds],
+  // The ACTIVE pair, answered right to its end — drives the full-saturation
+  // pre-collapse glow in the marker renderer. Read LIVE (not from the collapse
+  // snapshot) so the constellation lights up the moment its last answer lands,
+  // then collapses to its star when the panel closes.
+  const activeDone = useMemo(
+    () =>
+      journey.activeReads.length > 0 &&
+      journey.activeReads.every((r) => respondedIds.has(r.read.id)),
+    [journey, respondedIds],
   )
 
   /**
@@ -900,53 +1032,9 @@ export function SpiralUniverse({
   const [addOpen, setAddOpen] = useState(false)
   const [lockedNoticeOpen, setLockedNoticeOpen] = useState(false)
 
-  // Progressive appearance: section 1 is present from first arrival; the NEXT
-  // section's star appears ONLY when the current section is FULLY answered —
-  // its major and ALL of its minis. Partial completion never advances.
-  // Derived purely from responses, so a returning user's sky rebuilds
-  // correctly — including self-healing states where a section was fully
-  // answered but the next star never got unlocked in an earlier session.
-  const unlockedCount = useMemo(() => {
-    let n = Math.min(1, sections.length)
-    while (n < sections.length && fullyAnswered[n - 1]) n++
-    return n
-  }, [sections, fullyAnswered])
-
-  // SPIRAL EXTENSION — with sections beaded across BOTH strands, the initial
-  // spiral holds ~80% of the whole journey (HOLD_SECTIONS of 6) before the
-  // sky ever grows. The drawn spiral reaches far enough for those held
-  // sections (+ a sparse fading tail implying more); only when the last held
-  // section FULLY completes does the spiral GROW: fog glyphs draw in
-  // progressively outward (the ~2s luminous crawl below) for what remains.
-  const HOLD_SECTIONS = 5
-  const initialTEnd = useMemo(() => {
-    // Strands carry their own cursors, so the drawn extent must cover the
-    // FARTHEST held section across both strands, not just the last one.
-    let endT = READ_T_START_A
-    for (let i = 0; i < Math.min(HOLD_SECTIONS, sections.length); i++) {
-      endT = Math.max(endT, sections[i].endT)
-    }
-    return Math.min(GLYPH_T_END, advanceT(endT, SPIRAL_TAIL_ARC))
-  }, [sections])
-  const spiralExtended =
-    sections.length <= HOLD_SECTIONS ||
-    (sections.length > HOLD_SECTIONS && unlockedCount > HOLD_SECTIONS)
-  const visibleTEnd = spiralExtended ? GLYPH_T_END : initialTEnd
-
-  // Live growth: when spiralExtended flips during the session (not on a
-  // rebuilt returning-user sky), stagger the new glyphs' fade-in outward
-  // over ~2s so the arm visibly crawls into the dark.
-  const [crawling, setCrawling] = useState(false)
-  const prevExtendedRef = useRef<boolean | null>(null)
-  useEffect(() => {
-    const prev = prevExtendedRef.current
-    prevExtendedRef.current = spiralExtended
-    if (prev === false && spiralExtended) {
-      setCrawling(true)
-      const t = setTimeout(() => setCrawling(false), 3400)
-      return () => clearTimeout(t)
-    }
-  }, [spiralExtended])
+  // THE SPIRAL NEVER CHANGES SIZE. The drawn extent is the pinned literal —
+  // no growth, no extension flip, no luminous crawl. See SPIRAL_T_END.
+  const visibleTEnd = SPIRAL_T_END
 
   // Fog visibility vs the drawn extent: 1 well inside, thinning to 0 across
   // the last ~0.12 of t before the edge (the sparse fade-out tail).
@@ -956,34 +1044,18 @@ export function SpiralUniverse({
     if (t >= visibleTEnd) return 0
     return 1 - (t - fadeStart) / 0.12
   }
-  // During the growth crawl, new fog (t past the old edge) fades in staggered
-  // outward across ~2s — the luminous crawl.
-  const crawlDelay = (t: number) =>
-    crawling && t > initialTEnd
-      ? ((t - initialTEnd) / Math.max(0.01, GLYPH_T_END - initialTEnd)) * 2
-      : 0
 
-  // Every read of every PLACED section — what actually renders. Unanswered
-  // minis behind the cursor stay tappable forever.
-  const reads = useMemo<PlacedRead[]>(() => {
-    const out: PlacedRead[] = []
-    for (let i = 0; i < unlockedCount; i++) out.push(...sections[i].reads)
-    return out
-  }, [sections, unlockedCount])
+  // What actually renders: ONLY the active section's reads. Everything already
+  // complete is a star (journey.stars); nothing later is placed.
+  const reads = journey.activeReads
 
-  // The frontier always expands to CONTAIN every placed section (its
-  // outermost read + margin). When a new section is placed, this stretch is
-  // what makes its star bloom in (the justRevealed flare fires for everything
-  // the frontier just crossed). The expansion is TWEENED over ~2s so the fog
-  // reveal follows the same pacing as the spiral-growth crawl. Persisted, so
-  // a returning user's sky rebuilds already-expanded.
-  const neededRevealR = useMemo(() => {
-    let r = BASE_REVEAL_RADIUS
-    for (let i = 0; i < unlockedCount; i++) {
-      r = Math.max(r, sections[i].endR + 28)
-    }
-    return r
-  }, [sections, unlockedCount])
+  // The frontier expands to CONTAIN everything drawn — the collapsed stars and
+  // the active run. The expansion is TWEENED over ~2s so the fog reveal keeps
+  // its old pacing. Persisted, so a returning user's sky rebuilds expanded.
+  const neededRevealR = useMemo(
+    () => Math.max(BASE_REVEAL_RADIUS, journey.endR + 28),
+    [journey],
+  )
 
   // STALE-FRONTIER CLAMP (once, on load): a returning user's persisted radius
   // may date from an older sky layout where much larger radii were legitimate.
@@ -993,14 +1065,14 @@ export function SpiralUniverse({
   // lost.
   const clampedRef = useRef(false)
   useEffect(() => {
-    if (clampedRef.current || sections.length === 0) return
+    if (clampedRef.current || pairs.length === 0) return
     clampedRef.current = true
     const cap = neededRevealR + REVEAL_STEP * 2
     if (revealRadiusRef.current > cap) {
       setRevealRadius(cap)
       if (!guest) void saveRevealRadius(cap).catch(() => {})
     }
-  }, [sections, neededRevealR, guest])
+  }, [pairs, neededRevealR, guest])
 
   useEffect(() => {
     const from = revealRadiusRef.current
