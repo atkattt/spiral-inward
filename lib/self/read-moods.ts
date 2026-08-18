@@ -19,6 +19,28 @@
 //   relationships — leans slightly toward the panel
 //   identity / lineage — none
 
+/**
+ * The central avatar's resting expression.
+ *
+ * Distinct from ReadMood below: this is a single named EXPRESSION (a face),
+ * while ReadMood is a bundle of behavior timings for an open read. Transient
+ * values (agree / disagree / submit) were designed to decay back to "idle";
+ * persistent ones hold until changed.
+ *
+ * Lives here rather than in a component because it outlived the component that
+ * declared it — SelfCreature renders the avatar now, and this type is passed
+ * through SpiralUniverse for API compatibility.
+ */
+export type Mood =
+  | "idle"
+  | "agree"
+  | "disagree"
+  | "submit"
+  | "curious"
+  | "content"
+  | "overwhelmed"
+  | "sleepy"
+
 export type ReadMoodTone = "gentle" | "confronting" | "hopeful" | "neutral"
 
 export type ReadMood = {

@@ -18,7 +18,7 @@ import { PersonDetail, type Bond } from "@/components/circle/person-detail"
 import { SpiralUniverse } from "@/components/circle/spiral-universe"
 import type { UniverseFragment } from "@/lib/spiral/universe-reads"
 
-import type { Mood } from "@/components/circle/SelfAvatar"
+import type { Mood } from "@/lib/self/read-moods"
 import { buildColorMap } from "@/lib/circle/colors"
 import { useCircleData } from "@/components/circle/circle-data-provider"
 

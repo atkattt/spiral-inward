@@ -9,7 +9,6 @@ import {
   useRef,
   useState,
 } from "react"
-import type { Mood } from "@/components/circle/SelfAvatar"
 import SelfCreature, { type SelfCreatureHandle } from "@/components/self/self-creature"
 import { deriveLibrary } from "@/lib/self/signatures"
 import type { Person, Relationship } from "@/lib/db/schema"
@@ -39,7 +38,12 @@ import {
   symbolFor,
   type UniverseFragment,
 } from "@/lib/spiral/universe-reads"
-import { moodForRead, NEUTRAL_MOOD, type ReadMood } from "@/lib/self/read-moods"
+import {
+  moodForRead,
+  NEUTRAL_MOOD,
+  type Mood,
+  type ReadMood,
+} from "@/lib/self/read-moods"
 import { choreograph } from "@/lib/self/moves"
 import {
   SECTION_ORDER,
