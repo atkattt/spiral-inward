@@ -168,7 +168,7 @@ const GLYPH_T_END = 1.72
  * of completed sections: collapsed pairs live in the CORNER_SLOTS, so the only
  * thing ever placed on the walk is the ONE active section, always anchored at
  * ANCHOR_T. The bound is therefore just the anchor itself — the major read sits
- * at t=0.4205 and the minors trail INWARD from there, so the run can never
+ * at ANCHOR_T and the minors trail INWARD from there, so the run can never
  * extend past the anchor no matter how long the section is. That is well inside
  * this edge, and the rest is the fading tail.
  *
@@ -389,17 +389,28 @@ const READ_ARC_GAP = 30
  * arms is exactly 180° opposed — the alternation reads as switching sides, which
  * is the entire point of having two:
  *
- *   arm 0  -> world (-148,  137), screen x ≈  25 at 347×735  (LEFT)
- *   arm π  -> world ( 148, -137), screen x ≈ 322 at 347×735  (RIGHT)
+ *   arm π  -> world ( 189,  -38), screen (263, 216) at 347×735  (RIGHT, upper)
+ *   arm 0  -> world (-189,   38), screen ( 84, 425) at 347×735  (LEFT,  lower)
  *
- * t = 0.4205 is measured, not chosen by eye: it is the outermost value at which
- * a full worst-case 13-read section still fits a 347×735 portrait viewport, and
- * it holds all the way to n=16. The binding margin is 13.5px at 347×735,
- * widening to 27.5 / 35.0 / 54.0px at 375×812, 390×844 and 428×926. The two
- * sections never interfere — closest approach between them is 194px.
+ * ARM ORDER IS π FIRST, deliberately: the FIRST section of the journey opens in
+ * the upper right, above and right of the disc, and only then does the walk swing
+ * to the lower left. Reversing this array would silently invert the whole
+ * journey's opening, so the order is load-bearing, not cosmetic.
+ *
+ * t = 0.4025 is measured, not chosen by eye. It is the value that puts the major
+ * closest to the intended upper-right mark while still fitting a full worst-case
+ * 13-read section in a 347×735 portrait viewport. It cannot go further inward:
+ * because the minors trail INWARD from the anchor, pulling the major in drags the
+ * innermost read into the avatar disc — by t=0.38 the inner read is at r=124,
+ * inside the 132 floor (disc rim 120 + badge half-extent 12). So the disc, not
+ * the viewport edge, is what stops the section from hugging the mark exactly.
+ *
+ * Margins are 18.5px at 347×735, widening to 32.5 / 40.0 / 59.0px at 375×812,
+ * 390×844 and 428×926 — comfortably above the 13.5px floor the old t=0.4205 sat
+ * exactly on, so this move buys 5px of headroom rather than spending it.
  */
-const ANCHOR_T = 0.4205
-const ANCHOR_ARMS = [0, Math.PI] as const
+const ANCHOR_T = 0.4025
+const ANCHOR_ARMS = [Math.PI, 0] as const
 
 /**
  * CORNER SLOTS — where completed (lens, section) pairs go to live.
