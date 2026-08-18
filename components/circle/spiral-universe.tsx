@@ -166,11 +166,11 @@ const GLYPH_T_END = 1.72
  *
  * The sky no longer grows, and it no longer has to be swept against the number
  * of completed sections: collapsed pairs live in the CORNER_SLOTS, so the only
- * thing ever placed on the walk is the ONE active section, always anchored at
- * ANCHOR_T. The bound is therefore just the anchor itself — the major read sits
- * at ANCHOR_T and the minors trail INWARD from there, so the run can never
- * extend past the anchor no matter how long the section is. That is well inside
- * this edge, and the rest is the fading tail.
+ * thing ever placed on the walk is the ONE active section, anchored at one of the
+ * two ANCHORS. The bound is therefore just the outermost read either anchor can
+ * reach: idx 0 sweeps outward from t=0.316 and idx 1 inward from t=0.41, so
+ * neither run passes t≈0.46 even at its worst case. That is well inside this
+ * edge, and the rest is the fading tail.
  *
  * It is a LITERAL on purpose. The old value was derived from the walk's own
  * output (`sections[i].endT`), which made the drawn extent circular: place
@@ -348,13 +348,13 @@ type Glyph = {
 
 // READ objects — the user's MATCHED FRAGMENTS (same pipeline as /self) —
 // beaded along the spiral arm as ONE LINEAR PATH in walking order: the section's
-// major star at its anchor, then its minors one after another INWARD along the
-// same arm (section order: ascendant → moon → sun → knot → nodes → chapter; see
-// lib/spiral/sections.ts). No clusters — the sequence IS the path, and the
-// ringed cursor walks it one read at a time.
-// (READ_T_START_A/B are gone: sections no longer open at a fixed inner t and
-// grow outward. The major read is placed AT its anchor and the minors trail
-// back inward from it — see ANCHOR_T.)
+// major star at its anchor, then its minors one after another along the same arm
+// in whichever direction sweeps RIGHTWARD on screen (section order: ascendant →
+// moon → sun → knot → nodes → chapter; see lib/spiral/sections.ts). No clusters —
+// the sequence IS the path, and the ringed cursor walks it one read at a time.
+// (READ_T_START_A/B are gone: sections no longer open at a fixed inner t. The
+// major read is placed AT its anchor, which is the START of the run, and the
+// minors trail away from it left to right — see ANCHORS.)
 /**
  * Arc length (world units) between consecutive reads, lowered from 46 to 30.
  *
@@ -377,40 +377,49 @@ const READ_ARC_GAP = 30
 // only the active run is placed on the walk now — see the journey memo.)
 
 /**
- * THE TWO ANCHORS — where a section's MAJOR read sits.
+ * THE TWO ANCHORS — where a section's MAJOR read sits, and which way it flows.
  *
  * Every section used to open at READ_T_START_A, so every section in the whole
  * journey appeared in exactly the same place on screen: the work never moved,
- * and the layout carried no sense of progress. Now the major read IS the anchor,
- * and it alternates between two positions by pair index; the minors trail
- * inward behind it along the same arm, in walk order.
+ * and the layout carried no sense of progress. Now the major read IS the anchor
+ * and it alternates by pair index, with the minors trailing away from it in walk
+ * order so the sequence READS LEFT TO RIGHT on screen.
  *
- * One t, two arms. The strands are half a turn apart, so the same t on opposite
- * arms is exactly 180° opposed — the alternation reads as switching sides, which
- * is the entire point of having two:
+ * Left-to-right is the binding requirement here, and it is expensive. A section
+ * of 13 reads spans ~360 world units of arc, so a rightward sweep needs the full
+ * width of the viewport as runway — which means the major must START on the left.
+ * Every one of the 1100 configurations that sweeps rightward at every one of its
+ * 13 steps puts the major at screen x = 26…70 at 347×735. There is no viable
+ * left-to-right run that opens on the RIGHT side of the screen, so the earlier
+ * upper-right opening is unreachable under this constraint: at that position a
+ * 13-read run reverses after the 4th read and turns into a downward sweep
+ * (net dx −135 vs dy +256).
  *
- *   arm π  -> world ( 189,  -38), screen (263, 216) at 347×735  (RIGHT, upper)
- *   arm 0  -> world (-189,   38), screen ( 84, 425) at 347×735  (LEFT,  lower)
+ * Because of that, the two anchors are NOT 180° opposed any more and cannot be
+ * derived from one t and two arms. Both open on the left; they alternate UPPER
+ * vs LOWER instead of left vs right, and each needs its own arm, t and trail
+ * direction. Hence a descriptor array rather than two scalars.
  *
- * ARM ORDER IS π FIRST, deliberately: the FIRST section of the journey opens in
- * the upper right, above and right of the disc, and only then does the walk swing
- * to the lower left. Reversing this array would silently invert the whole
- * journey's opening, so the order is load-bearing, not cosmetic.
+ *   idx 0 -> screen ( 30, 337) at 347×735,  9% across, 46% down (upper-left)
+ *   idx 1 -> screen ( 64, 550) at 347×735, 18% across, 75% down (lower-left)
  *
- * t = 0.4025 is measured, not chosen by eye. It is the value that puts the major
- * closest to the intended upper-right mark while still fitting a full worst-case
- * 13-read section in a 347×735 portrait viewport. It cannot go further inward:
- * because the minors trail INWARD from the anchor, pulling the major in drags the
- * innermost read into the avatar disc — by t=0.38 the inner read is at r=124,
- * inside the 132 floor (disc rim 120 + badge half-extent 12). So the disc, not
- * the viewport edge, is what stops the section from hugging the mark exactly.
+ * Both sweep right and slightly up (net dx +287 / +253, dy −94 / −152) and both
+ * are strictly monotonic in screen x across all 13 reads. They stay 216px apart,
+ * and their closest approach is 155px — far past MARKER_CLEAR_RADIUS.
  *
- * Margins are 18.5px at 347×735, widening to 32.5 / 40.0 / 59.0px at 375×812,
- * 390×844 and 428×926 — comfortably above the 13.5px floor the old t=0.4205 sat
- * exactly on, so this move buys 5px of headroom rather than spending it.
+ * `outward` selects advanceT vs retreatT. The two anchors genuinely differ: idx 0
+ * sweeps right by moving OUT along its arm, idx 1 by moving IN. Direction is a
+ * property of the arm's local screen orientation, not a global choice, so it has
+ * to be stored per anchor.
+ *
+ * Margins are 18.1 / 18.2px at 347×735, widening to 32.1 / 39.6 / 58.6px at
+ * 375×812, 390×844 and 428×926 — clear of the 13.5px floor by ~4.6px. Worst-case
+ * capacity is n=13 for idx 0 and n=15 for idx 1.
  */
-const ANCHOR_T = 0.4025
-const ANCHOR_ARMS = [Math.PI, 0] as const
+const ANCHORS: ReadonlyArray<{ arm: number; t: number; outward: boolean }> = [
+  { arm: (175 * Math.PI) / 180, t: 0.316, outward: true },
+  { arm: (358 * Math.PI) / 180, t: 0.41, outward: false },
+]
 
 /**
  * CORNER SLOTS — where completed (lens, section) pairs go to live.
@@ -1020,13 +1029,16 @@ export function SpiralUniverse({
      */
     const activeReads: PlacedRead[] = []
     if (active) {
-      const arm = ANCHOR_ARMS[active.idx % ANCHOR_ARMS.length]
-      // frs[0] is the major: it sits AT the anchor, and each following minor
-      // retreats one gap further inward along the same arm.
-      let t = ANCHOR_T
+      const anchor = ANCHORS[active.idx % ANCHORS.length]
+      // frs[0] is the major: it sits AT the anchor — the START of the run — and
+      // each following minor steps one gap further along the arm in whichever
+      // direction sweeps RIGHTWARD on screen for this particular anchor.
+      let t = anchor.t
       active.frs.forEach((f, j) => {
-        if (j > 0) t = retreatT(t, READ_ARC_GAP)
-        const pt = spiralPoint(t, arm)
+        if (j > 0) {
+          t = anchor.outward ? advanceT(t, READ_ARC_GAP) : retreatT(t, READ_ARC_GAP)
+        }
+        const pt = spiralPoint(t, anchor.arm)
         activeReads.push({
           label: f.title,
           x: pt.x,
