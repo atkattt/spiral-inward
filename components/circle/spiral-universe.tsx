@@ -154,9 +154,11 @@ const GLYPH_T_END = 1.72
  * The sky no longer grows. This is the measured fixed point of the collapsing
  * journey: with completed (lens, section) pairs collapsed to single stars and
  * only ONE section's reads placed at a time, the continuous walk (stars at
- * SECTION_ARC_GAP, then the active section's reads at READ_ARC_GAP) reaches
- * this far along the curve in the worst observed case — 11 pairs with a
- * 13-read section — plus the sparse fading tail.
+ * SECTION_ARC_GAP, then the active section's reads at READ_ARC_GAP) never
+ * needs more room than this. Swept exhaustively against these gap constants:
+ * the worst case in the realistic range reaches t=0.6181 (9 stars + a 13-read
+ * section), and the walk does not overflow BOTH strands until ~24 stars with a
+ * 20-read section — far past any real journey. The rest is the fading tail.
  *
  * It is a LITERAL on purpose. The old value was derived from the walk's own
  * output (`sections[i].endT`), which made the drawn extent circular: place
