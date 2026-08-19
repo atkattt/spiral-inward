@@ -1370,43 +1370,16 @@ export function SpiralUniverse({
         // curious tilt.
         setReactColor(null)
       }
-      // Both YES and NO are self-knowledge — both push the frontier outward and
-      // materialize more of the universe. The step is small (slow fog growth),
-      // but revealing stays slightly ahead of the read progression: if the
-      // next unanswered read would still be locked, the frontier stretches
-      // just past it (capped at 2 steps so whole regions never flood open).
-      // Persisted for authed users; guests stay in memory.
-      // Computed from the mirror ref rather than inside the updater: the
-      // updater now runs inside a transition, where React may invoke it more
-      // than once, and the persist call below must not fire twice.
-      // Re-answering a read the user had already judged (now possible via the
-      // panel's edit affordance) must NOT step the frontier again — that would
-      // let someone flip one read back and forth to flood the sky open.
-      const isReanswer = current.prior != null
-      const prevR = revealRadiusRef.current
-      let nextR = prevR + REVEAL_STEP
-      const nextReadR = reads
-        .filter((rd) => rd.read.id !== current.read.id && !respondedIds.has(rd.read.id))
-        .map((rd) => rd.r)
-        .filter((r) => r > nextR)
-        .sort((a, b) => a - b)[0]
-      if (nextReadR !== undefined) {
-        nextR = Math.min(Math.max(nextR, nextReadR + 12), prevR + REVEAL_STEP * 2)
-      }
-      if (isReanswer) nextR = prevR
-      if (!guest && !isReanswer) void saveRevealRadius(nextR).catch(() => {})
-      /**
-       * Expanding the frontier re-renders the whole ~1890-span nebula (~250ms).
-       * Because React batches, that landed in the SAME commit as the button's
-       * own pressed state — so the press had no visible effect until the fog
-       * finished, which is what read as "lag before it registers".
-       *
-       * Marking only the frontier as a transition lets the urgent updates (the
-       * pressed state, the creature's reaction) commit and paint first, then
-       * the fog rolls outward in a follow-up render. The 250ms of work still
-       * happens; it just stops blocking the acknowledgement.
-       */
-      startTransition(() => setRevealRadius(nextR))
+      // The frontier does NOT move on answer. The spiral is a fixed size
+      // (SPIRAL_T_END is pinned), so there is nothing new to materialize by
+      // answering a read — the whole active run already sits inside the
+      // frontier that `neededRevealR` established when the section became
+      // active. Stepping it here only produced a creeping fog ring that read as
+      // the spiral "growing." Reveal now changes in exactly one place: the
+      // `neededRevealR` easing effect, which fires when a NEW section's geometry
+      // needs more room. That path is monotonic (it never eases inward), so
+      // once sky is lit it stays lit — including for returning users whose
+      // radius is rehydrated from the DB.
       if (reactTimer.current) clearTimeout(reactTimer.current)
       reactTimer.current = setTimeout(() => {
         if (agreeIt) {
@@ -1421,7 +1394,7 @@ export function SpiralUniverse({
         }
       }, 820)
     },
-    [panel, agree, disagree, closePanel, guest, reads, respondedIds],
+    [panel, agree, disagree, closePanel, guest],
   )
 
   useEffect(() => {
