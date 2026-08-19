@@ -5,6 +5,7 @@ import {
   startTransition,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -1754,6 +1755,19 @@ export function SpiralUniverse({
     setIsHome(Math.abs(cam.scale - 1) < 0.005 && Math.abs(cam.x) < 1 && Math.abs(cam.y) < 1)
   }, [])
 
+  // Center BEFORE the browser paints. The universe layer sits at the stage's
+  // top-left with `transformOrigin: 0 0` and no initial transform, so world
+  // origin (0,0) — where the avatar and the whole sky live — would paint in the
+  // top-left corner on the very first frame. `apply()` is what translates it to
+  // the stage center, but running it from a plain useEffect happens AFTER that
+  // first paint, so every mount (arriving at /circle, or navigating back to it)
+  // flashed the sky pinned to the top and then snapped to center. useLayoutEffect
+  // runs synchronously after mount and before paint, so the first visible frame
+  // is already centered — no flash, no drift.
+  useLayoutEffect(() => {
+    apply()
+  }, [apply])
+
   // Run an animated camera move: temporarily put a transform transition on the
   // universe layer, apply the new camera, then strip the transition so drags
   // and pinches stay perfectly snappy afterwards.
@@ -2005,7 +2019,9 @@ export function SpiralUniverse({
     const onResize = () => apply()
     window.addEventListener("resize", onResize)
 
-    // Initial layout (rect is available now that we've mounted + painted).
+    // Re-assert centering after listeners attach. The pre-paint useLayoutEffect
+    // above already did the initial centering; this is a harmless idempotent
+    // pass that also covers this effect re-running.
     apply()
 
     return () => {
