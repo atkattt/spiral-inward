@@ -1084,10 +1084,10 @@ export function SpiralUniverse({
     }
 
     // The revealed frontier has to contain everything actually drawn — which
-    // now means the active run alone. The corner stars are deliberately NOT
+    // now means the active run alone. The completed stars are deliberately NOT
     // folded in: they are exempt from the frontier entirely (see the stars
-    // render block), so feeding their r≈353 through here would blow the
-    // frontier wide open the moment one section completed and reveal the whole
+    // render block), so feeding their radius through here would let one
+    // completed section pull the frontier outward and reveal the whole
     // sky as a side effect of finishing a chapter.
     let endR = 0
     for (const r of activeReads) endR = Math.max(endR, r.r)
@@ -2141,8 +2141,8 @@ export function SpiralUniverse({
               // EXEMPT from the reveal frontier, unlike every other object in
               // the sky. A completed section is earned progress, not undiscovered
               // territory — it should not blink out because it happens to sit
-              // past the fog's current reach. This is what lets the corner slots
-              // live at r≈306-353, far outside BASE_REVEAL_RADIUS. Fog and
+              // past the fog's current reach. This is what lets the void slots
+              // live in pockets that may fall outside BASE_REVEAL_RADIUS. Fog and
               // unreached reads keep progressive reveal untouched.
               opacity: 1,
               transition: "opacity 1.2s ease",
