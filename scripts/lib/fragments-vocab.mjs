@@ -98,7 +98,10 @@ export const WRITABLE_COLUMNS = Object.freeze([
   "lens",
 ])
 
-/** The natural key used for upserts + duplicate detection. */
+/** The natural key. NOT unique — multiple fragments intentionally share a
+    (lens, trigger_type, condition) placement — so it is never a write-match
+    key. Used only for the export's informational duplicate report and the
+    non-unique lookup index in db/migrations. */
 export const NATURAL_KEY = Object.freeze(["lens", "trigger_type", "condition"])
 
 export const EXPECTED_BASELINE_COUNT = 799
@@ -138,7 +141,7 @@ export function isUuid(v) {
 // write anything if any row fails.
 // ---------------------------------------------------------------------------
 
-export function validateRow(row, { allowUnconfirmedTriggers = false } = {}) {
+export function validateRow(row) {
   const errors = []
   const req = (field) => {
     const v = row[field]
@@ -189,14 +192,11 @@ export function validateRow(row, { allowUnconfirmedTriggers = false } = {}) {
   }
   if (req("trigger_type")) {
     const tt = String(row.trigger_type).trim()
-    const allowed = allowUnconfirmedTriggers
-      ? [...TRIGGER_TYPES_CONFIRMED, ...TRIGGER_TYPES_MATCHER_ONLY]
-      : TRIGGER_TYPES_CONFIRMED
-    if (!allowed.includes(tt)) {
-      const hint = TRIGGER_TYPES_MATCHER_ONLY.includes(tt)
-        ? ` — implemented in matcher but has no confirmed CHECK entry; widen the CHECK, then re-run with --allow-unconfirmed-triggers`
-        : ""
-      errors.push(`trigger_type "${tt}" not allowed [${allowed.join(", ")}]${hint}`)
+    if (!TRIGGER_TYPES.includes(tt)) {
+      errors.push(
+        `trigger_type "${tt}" not allowed by the fragments_trigger_type_check ` +
+          `CHECK constraint [${TRIGGER_TYPES.join(", ")}]`,
+      )
     }
   }
 
@@ -296,41 +296,20 @@ export async function patchById({ url, key }, id, body) {
   return JSON.parse(text)
 }
 
-/** Plain INSERT that carries an explicit (new, non-colliding) id. */
-export async function insertWithId({ url, key }, row) {
+/** Plain INSERT of a single new row. If the row carries an id it is honored
+    (used when re-inserting an exported row that isn't live yet); if it has no
+    id, the column is omitted and the DB mints a fresh uuid. There is NO
+    natural-key upsert path: the natural key is intentionally non-unique
+    (multiple fragments share a placement), so id is the only safe match key. */
+export async function insertRow({ url, key }, row) {
   const res = await fetch(`${url}/rest/v1/fragments`, {
     method: "POST",
     headers: headers(key, { Prefer: "return=representation" }),
     body: JSON.stringify([sanitizeBody(row, { includeId: true })]),
   })
   const text = await res.text()
-  if (!res.ok) throw new Error(`INSERT id=${row.id} → ${res.status}: ${text}`)
-  return JSON.parse(text)
-}
-
-/** Upsert a batch on the natural key. Requires the (lens,trigger_type,
-    condition) unique index; without it PostgREST returns 42P10. id is NOT sent,
-    so conflicts keep the existing row's id and inserts get a fresh one. */
-export async function upsertOnNaturalKey({ url, key }, rows) {
-  const res = await fetch(
-    `${url}/rest/v1/fragments?on_conflict=${NATURAL_KEY.join(",")}`,
-    {
-      method: "POST",
-      headers: headers(key, {
-        Prefer: "resolution=merge-duplicates,return=representation",
-      }),
-      body: JSON.stringify(rows.map((r) => sanitizeBody(r, { includeId: false }))),
-    },
-  )
-  const text = await res.text()
   if (!res.ok) {
-    if (res.status === 400 && text.includes("42P10")) {
-      throw new Error(
-        `Upsert failed: no unique index on (${NATURAL_KEY.join(", ")}). ` +
-          `Run db/migrations/2026-08-20_fragments_natural_key_unique.sql first.`,
-      )
-    }
-    throw new Error(`UPSERT → ${res.status}: ${text}`)
+    throw new Error(`INSERT${row.id ? ` id=${row.id}` : " (new id)"} → ${res.status}: ${text}`)
   }
   return JSON.parse(text)
 }

@@ -4,21 +4,21 @@
 // WHOLE batch before writing anything, and verifies every write's returned row
 // count (a zero-row PostgREST update is NOT an error, so we check explicitly).
 //
-// MATCHING
+// MATCHING — id is the ONLY match key.
 //   - Rows WITH an id      -> UPDATE that row by id (id is the filter, never in
-//                             the body). If the id doesn't exist yet, it's a
-//                             new row inserted WITH that id.
-//   - Rows WITHOUT an id   -> UPSERT on the natural key (lens, trigger_type,
-//                             condition): update the matching row in place
-//                             (its id is preserved) or insert a new one (fresh
-//                             id). Requires the natural-key unique index.
+//                             the body). If the id doesn't exist live yet, it's
+//                             inserted WITH that id (e.g. restoring from a backup).
+//   - Rows WITHOUT an id   -> ALWAYS a new INSERT; the DB mints a fresh uuid.
+//                             They are NEVER matched against existing rows.
+//
+//   There is deliberately no natural-key match/upsert path: (lens, trigger_type,
+//   condition) is non-unique (many fragments share one placement), so matching
+//   on it is ambiguous and unsafe. To revise an existing fragment, edit the
+//   exported row IN PLACE so it keeps its id.
 //
 // MODES
 //   default            DRY RUN — reports exactly what would change, writes nothing.
 //   --apply            perform the writes.
-//   --allow-unconfirmed-triggers   permit matcher-only trigger types
-//                                   (mahadasha/antardasha/planet_in_nakshatra/...)
-//                                   ONLY after you've widened the CHECK constraint.
 //
 // USAGE
 //   node --env-file-if-exists=/vercel/share/.env.project \
@@ -34,19 +34,15 @@ import {
   canonicalJson,
   fetchAllFragments,
   isUuid,
-  naturalKeyOf,
   resolveEnv,
   fail,
-  insertWithId,
+  insertRow,
   patchById,
-  upsertOnNaturalKey,
   validateRow,
   WRITABLE_COLUMNS,
 } from "./lib/fragments-vocab.mjs"
 
 const APPLY = process.argv.includes("--apply")
-const ALLOW_UNCONFIRMED = process.argv.includes("--allow-unconfirmed-triggers")
-const UPSERT_BATCH = 100
 
 function arg(name) {
   const i = process.argv.indexOf(name)
@@ -88,7 +84,7 @@ async function main() {
   // ---- 1. VALIDATE THE WHOLE BATCH FIRST -----------------------------------
   const failures = []
   rows.forEach((row, i) => {
-    const errs = validateRow(row, { allowUnconfirmedTriggers: ALLOW_UNCONFIRMED })
+    const errs = validateRow(row)
     if (errs.length) failures.push({ i, id: row.id, errs })
   })
   if (failures.length) {
@@ -102,19 +98,20 @@ async function main() {
   }
   console.log("Validation passed for all rows.")
 
-  // In-file natural-key collisions among no-id rows would make upsert ambiguous.
-  const seen = new Map()
-  const inFileDupes = []
+  // In-file DUPLICATE ID check. No-id rows are always plain inserts, so they
+  // can't collide; but two rows sharing an id would make the by-id write
+  // ambiguous (which revision wins?), so reject that up front.
+  const idSeen = new Map()
+  const dupeIds = []
   rows.forEach((row, i) => {
-    if (isUuid(row.id)) return
-    const k = naturalKeyOf(row)
-    if (seen.has(k)) inFileDupes.push({ a: seen.get(k), b: i, k })
-    else seen.set(k, i)
+    if (!isUuid(row.id)) return
+    if (idSeen.has(row.id)) dupeIds.push({ a: idSeen.get(row.id), b: i, id: row.id })
+    else idSeen.set(row.id, i)
   })
-  if (inFileDupes.length) {
-    console.error(`\nBATCH REJECTED: ${inFileDupes.length} in-file natural-key collision(s):`)
-    for (const d of inFileDupes.slice(0, 20)) {
-      console.error(`  rows[${d.a}] and rows[${d.b}] share key ${d.k}`)
+  if (dupeIds.length) {
+    console.error(`\nBATCH REJECTED: ${dupeIds.length} duplicate id(s) in the file:`)
+    for (const d of dupeIds.slice(0, 20)) {
+      console.error(`  rows[${d.a}] and rows[${d.b}] share id ${d.id}`)
     }
     process.exit(1)
   }
@@ -126,23 +123,16 @@ async function main() {
   )
   const { rows: live } = await fetchAllFragments(env, "*")
   const liveById = new Map(live.map((r) => [r.id, r]))
-  const liveByNat = new Map(live.map((r) => [naturalKeyOf(r), r]))
 
-  const plan = { updateById: [], insertById: [], updateByNat: [], insertByNat: [], noop: [] }
-  const collisions = []
+  // id is the ONLY match key:
+  //   has id + live      -> update (or no-op if identical)
+  //   has id + not live  -> insert carrying that id (backup restore)
+  //   no id              -> insert new, DB mints the id
+  const plan = { updateById: [], insertById: [], insertNew: [], noop: [] }
 
   for (const row of rows) {
-    const nat = naturalKeyOf(row)
     if (isUuid(row.id)) {
       const existing = liveById.get(row.id)
-      // Guard: would this row's natural key land on a DIFFERENT existing id?
-      const natOwner = liveByNat.get(nat)
-      if (natOwner && natOwner.id !== row.id) {
-        collisions.push(
-          `row id=${row.id} would take natural key already owned by id=${natOwner.id}`,
-        )
-        continue
-      }
       if (existing) {
         const diff = changedFields(row, existing)
         if (diff.length === 0) plan.noop.push(row.id)
@@ -151,41 +141,19 @@ async function main() {
         plan.insertById.push({ row })
       }
     } else {
-      const existing = liveByNat.get(nat)
-      if (existing) {
-        const diff = changedFields(row, existing)
-        if (diff.length === 0) plan.noop.push(existing.id)
-        else plan.updateByNat.push({ row, existing, diff })
-      } else {
-        plan.insertByNat.push({ row })
-      }
+      plan.insertNew.push({ row })
     }
-  }
-
-  if (collisions.length) {
-    console.error(`\nBATCH REJECTED: ${collisions.length} natural-key collision(s) with live rows:`)
-    for (const c of collisions.slice(0, 20)) console.error(`  ${c}`)
-    console.error(
-      `\nChanging a row's (lens, trigger_type, condition) onto another row's key would ` +
-        `require merging or a delete. Resolve manually; this tool never deletes.`,
-    )
-    process.exit(1)
   }
 
   // ---- 3. REPORT THE PLAN --------------------------------------------------
   console.log(`\nPLAN`)
-  console.log(`  update by id .......... ${plan.updateById.length}`)
-  console.log(`  insert by id (new) .... ${plan.insertById.length}`)
-  console.log(`  update by natural key . ${plan.updateByNat.length}`)
-  console.log(`  insert by natural key . ${plan.insertByNat.length}`)
-  console.log(`  no-op (identical) ..... ${plan.noop.length}`)
-  const writes =
-    plan.updateById.length +
-    plan.insertById.length +
-    plan.updateByNat.length +
-    plan.insertByNat.length
+  console.log(`  update by id .............. ${plan.updateById.length}`)
+  console.log(`  insert by id (restore) .... ${plan.insertById.length}`)
+  console.log(`  insert new (no id) ........ ${plan.insertNew.length}`)
+  console.log(`  no-op (identical) ......... ${plan.noop.length}`)
+  const writes = plan.updateById.length + plan.insertById.length + plan.insertNew.length
 
-  const sample = [...plan.updateById, ...plan.updateByNat].slice(0, 15)
+  const sample = plan.updateById.slice(0, 15)
   if (sample.length) {
     console.log(`\n  sample updates (id : changed fields):`)
     for (const u of sample) console.log(`    ${u.existing.id} : ${u.diff.join(", ")}`)
@@ -202,37 +170,14 @@ async function main() {
 
   // ---- 4. APPLY + VERIFY EVERY WRITE ---------------------------------------
   // Validation already guaranteed the data is sound, so partial writes can only
-  // come from a transport failure. Every op is idempotent (PATCH by id / upsert
-  // by natural key / insert of a specific new id), so re-running resumes safely.
+  // come from a transport failure. Updates by id and inserts of a specific id
+  // are idempotent, so re-running resumes safely. New (no-id) inserts are NOT
+  // idempotent — a re-run would insert them again — so they go LAST, after the
+  // safe ops, and the log tells you how many landed if a later step fails.
   let applied = 0
 
-  // 4a. natural-key upserts (batched)
-  for (let i = 0; i < plan.insertByNat.length + plan.updateByNat.length; i += UPSERT_BATCH) {
-    const chunk = [...plan.updateByNat, ...plan.insertByNat]
-      .slice(i, i + UPSERT_BATCH)
-      .map((p) => p.row)
-    const rep = await upsertOnNaturalKey(env, chunk)
-    if (rep.length !== chunk.length) {
-      fail(
-        `Upsert verification failed: sent ${chunk.length}, PostgREST returned ${rep.length}. ` +
-          `Applied ${applied} rows before this. Re-run to resume.`,
-      )
-    }
-    applied += rep.length
-    console.log(`  upserted ${applied}/${writes}`)
-  }
-
-  // 4b. inserts that carry an explicit new id
-  for (const { row } of plan.insertById) {
-    const rep = await insertWithId(env, row)
-    if (rep.length !== 1) {
-      fail(`Insert id=${row.id} returned ${rep.length} rows (expected 1). Applied ${applied}. Re-run to resume.`)
-    }
-    applied += 1
-  }
-
-  // 4c. updates by id — verify each touched exactly one row (zero-row PATCH is
-  //     silent success in PostgREST, so this check is the safeguard).
+  // 4a. updates by id — verify each touched exactly one row (a zero-row PATCH is
+  //     silent success in PostgREST, so this explicit check is the safeguard).
   for (const { row } of plan.updateById) {
     const rep = await patchById(env, row.id, row)
     if (rep.length !== 1) {
@@ -244,6 +189,26 @@ async function main() {
     }
     applied += 1
     console.log(`  updated by id ${row.id}`)
+  }
+
+  // 4b. inserts that carry an explicit id (restoring a row that isn't live).
+  for (const { row } of plan.insertById) {
+    const rep = await insertRow(env, row)
+    if (rep.length !== 1) {
+      fail(`Insert id=${row.id} returned ${rep.length} rows (expected 1). Applied ${applied}. Re-run to resume.`)
+    }
+    applied += 1
+    console.log(`  inserted by id ${row.id}`)
+  }
+
+  // 4c. brand-new inserts (no id) — DB mints the uuid. Done last (not idempotent).
+  for (const { row } of plan.insertNew) {
+    const rep = await insertRow(env, row)
+    if (rep.length !== 1) {
+      fail(`Insert (new) returned ${rep.length} rows (expected 1). Applied ${applied}. Re-run would RE-INSERT the remaining new rows — de-dupe first.`)
+    }
+    applied += 1
+    console.log(`  inserted new ${rep[0]?.id ?? "?"}`)
   }
 
   console.log(`\nDONE. Wrote ${applied} row(s). Deleted 0. No ids changed.`)
