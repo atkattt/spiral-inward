@@ -13,21 +13,9 @@ import {
 import { useRouter } from "next/navigation"
 import SelfCreature, { type SelfCreatureHandle } from "@/components/self/self-creature"
 import { deriveLibrary } from "@/lib/self/signatures"
-import type { Person, Relationship } from "@/lib/db/schema"
 import { useSpiral } from "@/components/spiral/spiral-provider"
-import { makePersonRead, type Read } from "@/lib/spiral/reads"
-import { SELF_PERSON_ID } from "@/lib/relationships"
-import { AddPersonDialog } from "@/components/circle/add-person-dialog"
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
-import { GLASS_DIALOG_WIDTH, glassPanelStyle, ledOverlayStyle } from "@/lib/ui/glass"
+import { type Read } from "@/lib/spiral/reads"
 import { ledTexture } from "@/lib/ui/led"
-import { bondsUnlockState, type BondsUnlock } from "@/lib/circle/bonds-unlock"
 import { milestoneLevel, type AvatarSignals } from "@/lib/self/avatar-slots"
 import { lensOf, sectionClearProgress } from "@/lib/self/lenses"
 import { UniverseReadPanel, type PanelData } from "@/components/circle/universe-read-panel"
@@ -307,29 +295,6 @@ function StarIcon({ size, glow }: { size: number; glow?: string }) {
   )
 }
 
-/**
- * Classic anonymous-avatar silhouette (head + shoulders bust) for people
- * markers — the others in the universe are unknown faces, not stars. Same
- * currentColor + drop-shadow-glow contract as StarIcon.
- */
-function AvatarIcon({ size, glow }: { size: number; glow?: string }) {
-  return (
-    <svg
-      width={size}
-      height={size}
-      viewBox="0 0 24 24"
-      fill="currentColor"
-      aria-hidden="true"
-      style={{ display: "block", filter: glow || undefined }}
-    >
-      {/* head */}
-      <circle cx="12" cy="8.2" r="4.4" />
-      {/* shoulders — a dome clipped flat at the bottom */}
-      <path d="M12 13.6c-4.75 0-8.2 3.06-8.2 7.1 0 .4.32.9.82.9h14.76c.5 0 .82-.5.82-.9 0-4.04-3.45-7.1-8.2-7.1z" />
-    </svg>
-  )
-}
-
 type Glyph = {
   key: number
   x: number
@@ -510,115 +475,6 @@ function retreatT(t: number, arc: number): number {
   return Math.max(0, cur)
 }
 
-// PEOPLE drift in the dark between the strands. The first person added sits
-// innermost — close enough that their star is ON SCREEN in the home framing
-// the moment it's added (radial offset into the inter-strand gap keeps them
-// clear of the read beads at the same t) — and each subsequent one is placed
-// further along, out past the journey's edge.
-// t = 1/3 aims the spiral angle due NORTH (θ = t·6π − π/2 ≡ −π/2), putting
-// the first bond star straight above the creature at r ≈ 200 — one strand
-// turn closer to the center than the old due-south spot (r ≈ 280), while the
-// vertical direction keeps it inside a narrow portrait frame. The radial
-// offset in personPoint drops it in the dark pocket midway between the
-// strand crossings at r = 160 and r = 240.
-const PERSON_MIN_T = 1 / 3
-const PERSON_MAX_T = 1.12
-
-function personT(i: number, n: number) {
-  if (n <= 1) return 1 / 3
-  return PERSON_MIN_T + (PERSON_MAX_T - PERSON_MIN_T) * (i / (n - 1))
-}
-
-/**
- * Place a person in the DARK void between spiral strands — the glowing
- * strands belong to reads only. Same angle as their walk-order t, but radius
- * pushed halfway into the inter-strand gap. With BOTH strands carrying reads
- * (half a turn apart), successive strand crossings at a fixed angle are
- * MAX_R/(2·TURNS) apart, so the midpoint of THAT gap is the dark pocket.
- * A small deterministic wobble keeps a row of people from tracing a perfect
- * ghost-spiral of its own.
- */
-function personPoint(i: number, n: number) {
-  const t = personT(i, n)
-  // + SPIRAL_PHASE: people sit in the DARK pockets between the fog's arms, so
-  // they must rotate with the arms or they would land on top of them.
-  const theta = t * TURNS * Math.PI * 2 - Math.PI / 2 + SPIRAL_PHASE
-  const gap = MAX_R / (TURNS * 2)
-  const rnd = mulberry32(0xbeef + i * 7919)
-  const r = MAX_R * t + gap * (0.42 + rnd() * 0.16)
-  return { x: r * Math.cos(theta), y: r * Math.sin(theta) }
-}
-
-/**
- * The ADD-PERSON invitation glyph — an empty slot in the sky where the first
- * bond would go, sitting down-left of the creature (matching the design).
- *
- * It gets its OWN spot rather than borrowing personPoint(): that function
- * spreads real people from due-north outward, so the "add" slot would jump
- * around as people are added, and at n=1 would land exactly where the first
- * real person is about to appear. A fixed anchor keeps the invitation in one
- * learnable place for the life of the account.
- *
- * Derived the same way people are (angle from t, radius pushed into the dark
- * pocket between strands) so it belongs to the same visual system: at
- * t = 0.206 the spiral angle is ~132° — down and to the left.
- *
- * GAP_FRAC 0.5 centers it between the two strands it sits between. The galaxy
- * has TWO interleaved strands half a turn apart (see spiralPoint's `phase`), so
- * neighbouring arms at a given angle are `gap` apart — NOT 2*gap — which makes
- * half of that the true midline. Measuring rendered fog brightness along this
- * exact ray confirms it: density peaks at r≈97 and r≈182 (the two arms) with a
- * void between, so the midpoint is ~139.5 and gap*0.5 lands at 138.9.
- *
- * Don't push this much past 0.5: at the 240px disc cap the creature's rim
- * reaches r=120, and the badge already sits only ~6px clear of it.
- */
-const ADD_PERSON_T = 0.206
-const ADD_PERSON_GAP_FRAC = 0.5
-
-function addPersonPoint() {
-  // + SPIRAL_PHASE: this slot's whole premise is the VOID between two arms.
-  // Its radius was tuned against measured fog density (peaks at r≈97 and
-  // r≈182, so the midline is ~139.5 and gap*0.5 lands at 138.9) — a radial
-  // relationship, and therefore invariant under rotation. But the ANGLE has to
-  // travel with the fog: leave it out and the badge stays put while the arms
-  // turn 133° around it, dropping the invitation straight onto a strand.
-  const theta =
-    ADD_PERSON_T * TURNS * Math.PI * 2 - Math.PI / 2 + SPIRAL_PHASE
-  const gap = MAX_R / (TURNS * 2)
-  const r = MAX_R * ADD_PERSON_T + gap * ADD_PERSON_GAP_FRAC
-  return { x: r * Math.cos(theta), y: r * Math.sin(theta) }
-}
-
-/**
- * The ⊕ badge that marks the silhouette as an invitation rather than a person.
- * Rides the lower-left of the bust, like a system "add" affordance.
- */
-function AddBadgeIcon({ size, glow }: { size: number; glow?: string }) {
-  return (
-    <svg
-      width={size}
-      height={size}
-      viewBox="0 0 24 24"
-      aria-hidden="true"
-      style={{ display: "block", filter: glow || undefined }}
-    >
-      {/* Filled disc so the plus reads against whatever sits behind it. */}
-      <circle cx="12" cy="12" r="11" fill="currentColor" />
-      <path
-        d="M12 6.6v10.8M6.6 12h10.8"
-        stroke="#050505"
-        strokeWidth="3"
-        strokeLinecap="round"
-      />
-    </svg>
-  )
-}
-
-// Fallback palette for people (used only when colorById has no entry), kept
-// distinct from the read colors above.
-const PERSON_COLORS = ["#8ab6e8", "#e8b84a", "#5fd0a8", "#e87a7a", "#6ac9d8", "#e8a35f"]
-
 type PlacedRead = {
   label: string
   x: number
@@ -672,21 +528,7 @@ type StarNode = {
   y: number
   r: number
 }
-type PlacedPerson = {
-  person: Person
-  x: number
-  y: number
-  r: number
-  color: string
-  panel: PanelData
-  read: Read
-}
-type PlacedBond = { id: number; x1: number; y1: number; x2: number; y2: number }
-
 export function SpiralUniverse({
-  people,
-  relationships,
-  colorById,
   answerCount = 0,
   userId,
   onSelectSelf,
@@ -694,15 +536,11 @@ export function SpiralUniverse({
   initialRevealRadius = BASE_REVEAL_RADIUS,
   onHomeChange,
   onBackChange,
-  onBondsLockChange,
   matchedReads,
   initialResponses,
   guestFragments,
   lensRanks,
 }: {
-  people: Person[]
-  relationships: Relationship[]
-  colorById: Map<number, string>
   /** resting expression, retained for API compatibility (unused by creature) */
   mood?: Mood
   /** written answers so far — one permanent aura glyph each on the creature */
@@ -723,12 +561,6 @@ export function SpiralUniverse({
    * lives in here.
    */
   onBackChange?: (back: (() => void) | null) => void
-  /**
-   * Publishes the bonds gate so the header menu can dim its Bonds entry.
-   * The parent can't derive this: the live verdicts (including this session's
-   * unsaved ones) only exist in here.
-   */
-  onBondsLockChange?: (state: BondsUnlock) => void
   /** authed: matched fragments from the /self pipeline (weight desc) */
   matchedReads?: UniverseFragment[]
   /** authed: saved agree/disagree per fragment id from read_responses */
@@ -1195,31 +1027,6 @@ export function SpiralUniverse({
     [journey, respondedIds],
   )
 
-  /**
-   * BONDS PROGRESSION — deferred to the shared rule in lib/circle/bonds-unlock,
-   * so the spiral's dimmed invitation, the menu's Bonds entry, and the /bonds
-   * route guard can never disagree about whether bonds are open.
-   */
-  const bondsLock = useMemo(
-    () => bondsUnlockState(fragments, respondedIds),
-    [fragments, respondedIds],
-  )
-  const sectionsRemaining = bondsLock.remaining
-  const addPersonVisible = bondsLock.visible
-  const addPersonUnlocked = bondsLock.unlocked
-
-  // Report the gate upward so the header menu can dim its Bonds entry in step
-  // with this session's answers. Effect (not render) so the parent's setState
-  // never fires mid-render; through a ref (like onBackChange) so an inline
-  // parent callback can't re-fire this every render.
-  const onBondsLockChangeRef = useRef(onBondsLockChange)
-  onBondsLockChangeRef.current = onBondsLockChange
-  useEffect(() => {
-    onBondsLockChangeRef.current?.(bondsLock)
-  }, [bondsLock])
-  const [addOpen, setAddOpen] = useState(false)
-  const [lockedNoticeOpen, setLockedNoticeOpen] = useState(false)
-
   // THE SPIRAL NEVER CHANGES SIZE. The drawn extent is the pinned literal —
   // no growth, no extension flip, no luminous crawl. See SPIRAL_T_END.
   const visibleTEnd = SPIRAL_T_END
@@ -1318,13 +1125,6 @@ export function SpiralUniverse({
     // Attunement: the creature (glyphs + glow) adopts the read's accent while
     // the panel is open — SelfCreature eases the color over ~500ms.
     setReactColor(r.panel.accent ?? null)
-  }, [])
-
-  const openPerson = useCallback((p: PlacedPerson) => {
-    if (reactTimer.current) clearTimeout(reactTimer.current)
-    setPanel({ data: p.panel, read: p.read })
-    setReactMood("curious")
-    setReactColor(p.color) // tint to that person's color while open
   }, [])
 
   // yes/no from the panel → SAME persistence as the bottom ReadHub, plus a
@@ -1459,19 +1259,13 @@ export function SpiralUniverse({
     )
   }, [panelOpen, moodActive, activeMood.tone])
 
-  // World-space centers of every read/person marker. The nebula carves a
-  // small clear disc around each so a marker's badge sits in the sky cleanly,
-  // never stacked on top of a fog glyph. People clear at their ACTUAL
-  // in-the-void position (personPoint), matching where they render.
-  const markerCenters = useMemo<{ x: number; y: number }[]>(() => {
-    const pts = reads.map((r) => ({ x: r.x, y: r.y }))
-    const n = people.length
-    for (let i = 0; i < n; i++) pts.push(personPoint(i, n))
-    // The add-person invitation gets the same clean disc as any other marker,
-    // so fog glyphs never sit behind the silhouette.
-    if (addPersonVisible) pts.push(addPersonPoint())
-    return pts
-  }, [reads, people.length, addPersonVisible])
+  // World-space centers of every read marker. The nebula carves a small clear
+  // disc around each so a marker's badge sits in the sky cleanly, never stacked
+  // on top of a fog glyph.
+  const markerCenters = useMemo<{ x: number; y: number }[]>(
+    () => reads.map((r) => ({ x: r.x, y: r.y })),
+    [reads],
+  )
 
   // The nebula: a dense field of ASCII glyphs scattered along AND across the
   // spiral arm, forming cloudy limbs with organic clumping (density noise)
@@ -1678,61 +1472,12 @@ export function SpiralUniverse({
     }
   }, [currentReadId])
 
-  // PEOPLE — the others in the universe, floating in the dark void BETWEEN
-  // the arm's turns (the glowing arm is reads-only), each in their own
-  // palette color. Tapping opens the bond read.
-  const placedPeople = useMemo<PlacedPerson[]>(() => {
-    const n = people.length
-    return people.map((person, i) => {
-      const { x, y } = personPoint(i, n)
-      const read = makePersonRead(person.id, person.name)
-      return {
-        person,
-        x,
-        y,
-        r: Math.hypot(x, y),
-        color: colorById.get(person.id) ?? PERSON_COLORS[i % PERSON_COLORS.length],
-        panel: {
-          src: "the bond between you",
-          title: `${person.name} × you`,
-          body: read.text,
-          accent: colorById.get(person.id) ?? PERSON_COLORS[i % PERSON_COLORS.length],
-        },
-        read,
-      }
-    })
-  }, [people, colorById])
-
-  // BONDS — faint dashed lines between connected people, in world coords.
-  // SELF_PERSON_ID endpoints resolve to the world origin (0,0), where the
-  // self creature is anchored — the auto you↔them bond points at YOU.
-  const bonds = useMemo<PlacedBond[]>(() => {
-    const byId = new Map(placedPeople.map((pp) => [pp.person.id, pp]))
-    const pointOf = (personId: number): { x: number; y: number } | null => {
-      if (personId === SELF_PERSON_ID) return { x: 0, y: 0 }
-      const pp = byId.get(personId)
-      return pp ? { x: pp.x, y: pp.y } : null
-    }
-    const out: PlacedBond[] = []
-    for (const r of relationships) {
-      const a = pointOf(r.fromPersonId)
-      const b = pointOf(r.toPersonId)
-      if (!a || !b) continue
-      out.push({ id: r.id, x1: a.x, y1: a.y, x2: b.x, y2: b.y })
-    }
-    return out
-  }, [relationships, placedPeople])
-
-  // Mirror the latest placements + openers into refs so the (stable) pointer
+  // Mirror the latest reads + opener into refs so the (stable) pointer
   // effect can resolve a tap to the right object without re-subscribing.
   const readsRef = useRef(reads)
   readsRef.current = reads
-  const peopleRef = useRef(placedPeople)
-  peopleRef.current = placedPeople
   const openReadRef = useRef(openRead)
   openReadRef.current = openRead
-  const openPersonRef = useRef(openPerson)
-  openPersonRef.current = openPerson
   const routerRef = useRef(router)
   routerRef.current = router
 
@@ -1984,10 +1729,6 @@ export function SpiralUniverse({
       if (type === "read") {
         const r = readsRef.current[idx]
         if (r && r.r <= revealRadiusRef.current) openReadRef.current(r)
-      } else if (type === "person") {
-        // Bond stars are never frontier-locked (see the placedPeople render).
-        const p = peopleRef.current[idx]
-        if (p) openPersonRef.current(p)
       }
     }
 
@@ -2096,31 +1837,6 @@ export function SpiralUniverse({
           monoFont={monoFont}
           visibleTEnd={visibleTEnd}
         />
-
-        {/* Bonds — faint dashed lines between connected people, in world
-            coords. Drawn beneath the nodes via a zero-size, overflow-visible
-            SVG anchored at the universe origin. */}
-        {bonds.length > 0 && (
-          <svg
-            className="absolute left-0 top-0 overflow-visible"
-            style={{ width: 0, height: 0 }}
-            aria-hidden="true"
-          >
-            {bonds.map((b) => (
-              <line
-                key={b.id}
-                x1={b.x1}
-                y1={b.y1}
-                x2={b.x2}
-                y2={b.y2}
-                stroke="#3a3550"
-                strokeWidth={1}
-                strokeDasharray="3 5"
-                opacity={0.5}
-              />
-            ))}
-          </svg>
-        )}
 
         {/* COLLAPSED PAIRS — one star per fully-answered (lens, section) pair,
             sitting where that constellation's run began. Deliberately NOT
@@ -2275,163 +1991,6 @@ export function SpiralUniverse({
           )
         })}
 
-        {/* ===== ADD-PERSON INVITATION =====
-            An empty slot in the sky where your first bond would go. Appears
-            once one section is complete, DIM until three are, then lights up
-            and opens the add dialog in place.
-
-            Lives in the world layer (not the HUD) on purpose: it's a place in
-            the universe, so it pans and zooms with the sky exactly like the
-            people it's inviting. */}
-        {addPersonVisible &&
-          (() => {
-            const { x, y } = addPersonPoint()
-            // Dim state borrows the locked-marker treatment used for reads
-            // (#4a4e56, no glow) so "not yet" looks the same everywhere.
-            const tint = addPersonUnlocked ? "#cfd6e0" : "#4a4e56"
-            return (
-              <div
-                className="group absolute flex flex-col items-center"
-                style={{
-                  left: px2(x),
-                  top: px2(y),
-                  transform: "translate(-50%, -50%)",
-                  // Dim but NOT pointer-blocked while locked — tapping is how
-                  // the user learns what opens it.
-                  opacity: addPersonUnlocked ? 1 : 0.42,
-                  transition: "opacity 1s ease, filter 1s ease",
-                }}
-              >
-                <button
-                  type="button"
-                  aria-label={
-                    addPersonUnlocked
-                      ? "Add a person to your circle"
-                      : `Bonds locked — complete ${sectionsRemaining} more read${
-                          sectionsRemaining === 1 ? "" : "s"
-                        } to add a person`
-                  }
-                  onClick={() =>
-                    addPersonUnlocked
-                      ? setAddOpen(true)
-                      : setLockedNoticeOpen(true)
-                  }
-                  className="relative flex cursor-pointer items-center justify-center rounded-full leading-none transition-[filter] duration-150 group-hover:brightness-150"
-                  style={{
-                    // Same 21px footprint as a person/major star, so the empty
-                    // slot reads as the same class of object it will become.
-                    width: 21,
-                    height: 21,
-                    backgroundColor: "#050505",
-                    border: `1.5px solid ${tint}`,
-                    color: tint,
-                    boxShadow: addPersonUnlocked
-                      ? `0 0 10px ${tint}, 0 0 20px ${tint}66`
-                      : "none",
-                  }}
-                >
-                  <AvatarIcon
-                    size={12}
-                    glow={
-                      addPersonUnlocked
-                        ? toDropShadow(`0 0 8px ${tint}, 0 0 18px ${tint}`)
-                        : undefined
-                    }
-                  />
-                  {/* ⊕ badge, offset to the lower-left of the bust. Absolute so
-                      it overlaps the ring rather than displacing the silhouette
-                      inside it. */}
-                  <span
-                    className="pointer-events-none absolute"
-                    style={{
-                      left: -6,
-                      bottom: -3,
-                      color: tint,
-                      lineHeight: 0,
-                    }}
-                  >
-                    <AddBadgeIcon size={11} />
-                  </span>
-                </button>
-              </div>
-            )
-          })()}
-
-        {/* PEOPLE — placed on the spiral arm, each in their own color. Tap to
-            open the bond read. */}
-        {placedPeople.map((pp, i) => {
-          // People are the user's OWN circle — they added each one, so a bond
-          // star is never gated behind the read journey's frontier. It appears
-          // lit and tappable the moment it's added (unlike reads, which do
-          // unlock progressively).
-          const locked = false
-          return (
-            <div
-              key={pp.person.id}
-              data-obj="person"
-              data-obj-index={i}
-              role="button"
-              tabIndex={locked ? -1 : 0}
-              aria-hidden={locked || undefined}
-              aria-label={`Bond: ${pp.person.name}`}
-              onKeyDown={(e) => {
-                if (locked) return
-                if (e.key === "Enter" || e.key === " ") {
-                  e.preventDefault()
-                  openPerson(pp)
-                }
-              }}
-              className={`group absolute flex flex-col items-center${
-                justRevealed(pp.r) ? " animate-flare-in" : ""
-              }`}
-              style={{
-                left: px2(pp.x),
-                top: px2(pp.y),
-                // No locked shrink — people keep the exact major-star footprint
-                // (31px ring, 17px icon) in every state; lock is conveyed by
-                // dimming/blur alone.
-                transform: "translate(-50%, -50%)",
-                opacity: locked ? 0.34 : 1,
-                filter: locked ? "grayscale(0.8) blur(0.5px)" : "none",
-                pointerEvents: locked ? "none" : "auto",
-                cursor: locked ? "default" : "pointer",
-                transition:
-                  "opacity 1s ease, filter 1s ease, transform 1s cubic-bezier(.3,.8,.3,1)",
-              }}
-            >
-              {/* An anonymous silhouette inside a black disc outlined in this
-                  person's hue — an unknown face adrift in the dark between
-                  the arms. Slightly larger than a read node. */}
-              <span
-                className={`flex items-center justify-center rounded-full leading-none transition-[filter] duration-150 group-hover:brightness-150${
-                  locked ? "" : " animate-object-pulse"
-                }`}
-                style={{
-                  // Same footprint as a major star (21px ring, 12px icon) so
-                  // people and stars read as equal citizens of the universe.
-                  width: 21,
-                  height: 21,
-                  backgroundColor: "#050505",
-                  border: `1.5px solid ${locked ? "#4a4e56" : pp.color}`,
-                  color: locked ? "#4a4e56" : pp.color,
-                  fontFamily: monoFont,
-                  fontSize: 13,
-                  // Identical glow strengths to the current major star.
-                  boxShadow: locked ? "none" : `0 0 10px ${pp.color}, 0 0 20px ${pp.color}66`,
-                }}
-              >
-                <AvatarIcon
-                  size={12}
-                  glow={
-                    locked
-                      ? undefined
-                      : toDropShadow(`0 0 8px ${pp.color}, 0 0 18px ${pp.color}`)
-                  }
-                />
-              </span>
-            </div>
-          )
-        })}
         {/* ===== The avatar: anchored to the WORLD at origin (0,0) — the
             spiral's center — so it pans with the map, but counter-scaled by
             1/cameraScale (set imperatively in apply()) so the disc, creature,
@@ -2778,75 +2337,6 @@ export function SpiralUniverse({
         }
       />
 
-      {/* The add flow, opened straight from the sky so you never leave the
-          circle. Reuses the same dialog the bonds page uses. */}
-      <AddPersonDialog open={addOpen} onOpenChange={setAddOpen} />
-
-      {/* Why bonds aren't open yet, shown when the dimmed invitation is
-          tapped. Names exactly how much is left and what a read is, rather
-          than just refusing. */}
-      <Dialog open={lockedNoticeOpen} onOpenChange={setLockedNoticeOpen}>
-        <DialogContent
-          className={`${GLASS_DIALOG_WIDTH} gap-3 p-4 ring-0`}
-          style={glassPanelStyle}
-        >
-          <DialogHeader>
-            <DialogTitle
-              style={{
-                fontFamily: monoFont,
-                fontSize: 16,
-                fontWeight: 500,
-                letterSpacing: 1,
-                color: "#fff",
-              }}
-            >
-              not yet
-            </DialogTitle>
-          </DialogHeader>
-          <DialogDescription
-            style={{
-              fontFamily: monoFont,
-              fontSize: 13,
-              lineHeight: 1.6,
-              letterSpacing: 0.3,
-              color: "rgba(255,255,255,0.78)",
-            }}
-          >
-            {/* Lowercase, no em dashes, and the "the sky needs to learn more
-                about you" line is gone: it restated the first sentence at
-                greater length. What's left is the ask and the unit, in the
-                voice of a friend rather than an oracle. */}
-            {`just ${sectionsRemaining} more read${
-              sectionsRemaining === 1 ? "" : "s"
-            } and you can add people. a read is one star plus all the little ones under it.`}
-          </DialogDescription>
-          <button
-            type="button"
-            onClick={() => setLockedNoticeOpen(false)}
-            style={{
-              marginTop: 2,
-              background: "transparent",
-              border: "1px solid #fff",
-              color: "#fff",
-              fontFamily: monoFont,
-              fontSize: 11,
-              letterSpacing: 2,
-              textTransform: "uppercase",
-              padding: "10px 18px",
-              borderRadius: 30,
-              cursor: "pointer",
-            }}
-          >
-            keep reading
-          </button>
-
-          {/* Same LED overlay as the add-person dialog. Applied here too
-              because these two popups can appear from the same spiral view
-              seconds apart, so a grid on one and bare glass on the other would
-              read as a bug rather than a choice. */}
-          <div aria-hidden="true" style={ledOverlayStyle({ radius: 13, gridAlpha: 0.1, vignetteBlur: 28, vignetteSpread: 6, vignetteAlpha: 0.34 })} />
-        </DialogContent>
-      </Dialog>
     </div>
   )
 }
