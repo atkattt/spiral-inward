@@ -34,10 +34,7 @@ import {
   User,
   Users,
 } from "lucide-react"
-import {
-  BONDS_UNLOCK_SECTIONS,
-  type BondsUnlock,
-} from "@/lib/circle/bonds-unlock"
+import { bondsGateStub } from "@/lib/circle/bonds-unlock"
 
 export function CircleView({
   userName,
@@ -85,24 +82,18 @@ export function CircleView({
     [],
   )
   /**
-   * The bonds gate, published by SpiralUniverse (which owns the live verdicts,
-   * including this session's). Starts CLOSED on purpose: the alternative is
-   * flashing an open Bonds link on first paint and yanking it away a frame
-   * later, and the spiral corrects this immediately on mount.
+   * The bonds gate. Bonds no longer live on the spiral (the add-person
+   * affordance and the in-sky people/bond markers were removed) — Bonds is now
+   * purely a locked menu entry. The unlock is DERIVED, not stored, and will be
+   * computed from responses the same way section completion is (see
+   * lib/circle/bonds-unlock). For now it is STUBBED to always-locked until the
+   * remaining lenses exist; swap `bondsGateStub()` for the real
+   * `bondsUnlockState(fragments, respondedIds)` call once they do.
    */
-  const [bondsLock, setBondsLock] = useState<BondsUnlock>({
-    completedSections: 0,
-    threshold: BONDS_UNLOCK_SECTIONS,
-    remaining: BONDS_UNLOCK_SECTIONS,
-    visible: false,
-    unlocked: false,
-  })
-  // Same voice and same unit as the spiral's "not yet" dialog, so the two
-  // explanations can't contradict. The dialog is where "a read" gets defined;
-  // this is a one-line note under a menu item, so it just states the ask.
-  const bondsLockNote = `just ${bondsLock.remaining} more read${
-    bondsLock.remaining === 1 ? "" : "s"
-  } and bonds opens`
+  const bondsLock = bondsGateStub()
+  // A one-line note under the menu item. The real gate opens once every lens is
+  // complete; until the lenses ship it simply reads as "coming".
+  const bondsLockNote = "unlocks when all your lenses are complete"
 
   const [erasing, setErasing] = useState(false)
   // The central avatar's resting expression. Per-read reactions (agree /
@@ -310,9 +301,6 @@ export function CircleView({
           been added to the circle. */}
       <div className="relative z-10 flex-1">
         <SpiralUniverse
-          people={people}
-          relationships={relationships}
-          colorById={colorById}
           mood={mood}
           answerCount={answerCount}
           userId={userId}
@@ -323,7 +311,6 @@ export function CircleView({
           guestFragments={guestFragments}
           lensRanks={lensRanks}
           onBackChange={handleBackChange}
-          onBondsLockChange={setBondsLock}
         />
       </div>
 

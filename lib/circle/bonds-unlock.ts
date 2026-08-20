@@ -46,6 +46,27 @@ export type BondsUnlock = {
  * credit is wanted; the gate copy promises "the star and all its smaller
  * ones", so the gate uses the strict reading. Do not swap one for the other.
  */
+/**
+ * TEMPORARY stub: Bonds is currently a permanently-locked menu entry.
+ *
+ * Bonds was pulled off the spiral (no more add-person affordance, no in-sky
+ * people/bond markers), and the feature it gates — reads about you and someone
+ * else — depends on lenses that don't exist yet. Rather than compute a gate the
+ * user could satisfy and then hit an empty feature, we hold it closed until the
+ * lenses ship. When they do, delete this and call `bondsUnlockState` with the
+ * real fragments + respondedIds; the shape is identical, so nothing downstream
+ * changes.
+ */
+export function bondsGateStub(): BondsUnlock {
+  return {
+    completedSections: 0,
+    threshold: BONDS_UNLOCK_SECTIONS,
+    remaining: BONDS_UNLOCK_SECTIONS,
+    visible: false,
+    unlocked: false,
+  }
+}
+
 export function bondsUnlockState(
   fragments: readonly UnlockFragment[],
   respondedIds: ReadonlySet<string>,
