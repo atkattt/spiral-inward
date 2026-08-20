@@ -8,6 +8,32 @@
 // - If a condition references a field that's missing from the chart (or the
 //   condition itself is malformed), that fragment simply doesn't match — we
 //   never throw.
+//
+// ⚠️ trigger_type DIVERGENCE — matcher vs. DB CHECK constraint (as of 2026-08).
+// The live `fragments_trigger_type_check` (dashboard-confirmed) allows exactly
+// these 10 values:
+//   planet_in_sign, planet_in_house, ascendant_sign, planet_in_sign_and_house,
+//   conjunction, moon_nakshatra, planet_nakshatra, dasha, house_lord, yoga
+// The switch below only handles 6 of them (planet_in_sign, planet_in_house,
+// ascendant_sign, planet_in_sign_and_house, conjunction, moon_nakshatra).
+//
+// 1. FOUR CHECK-allowed types have NO branch here, so nothing responds to them:
+//      • planet_nakshatra   (matcher instead implements planet_in_nakshatra)
+//      • dasha              (matcher instead implements mahadasha + antardasha)
+//      • house_lord         (matcher instead implements house_lord_in_house)
+//      • yoga               (matcher has no counterpart at all)
+//
+// 2. FIVE branches below are UNWRITABLE under the current CHECK — no fragment
+//    can carry these trigger_types (INSERT is rejected 23514), so they are dead
+//    code today:
+//      planet_in_nakshatra, mahadasha, antardasha, house_lord_in_house,
+//      planet_dignity
+//
+// ⚠️ CONSEQUENCE: a fragment written with a CHECK-allowed-but-unmatched type
+//    (planet_nakshatra / dasha / house_lord / yoga) IMPORTS SUCCESSFULLY yet
+//    NEVER SURFACES at runtime — the switch falls through and it matches nothing.
+//    This naming drift is intentionally left unreconciled; the decision belongs
+//    with the Timing lens design. Do not "fix" the names here in isolation.
 import { nakshatraKeyOf } from "@/lib/vedic/astro"
 
 // ---- chart shape (loose — we only read what we need) ----------------------
