@@ -16,6 +16,10 @@ export type Read = {
   // lib/spiral/sections). Stamped when the spiral builds the read, so other
   // surfaces (history) can carry the SAME section accent as its star.
   section?: string
+  // The lens (phase) this read belongs to — e.g. "vedic", "vedic_deep".
+  // Stamped alongside `section` when the spiral builds the read, so /history
+  // can group its sections under the lens that authored them.
+  lens?: string
 }
 
 export const REASON_TAGS = [
