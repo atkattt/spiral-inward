@@ -54,34 +54,30 @@ export const LIFE_DOMAINS = Object.freeze([
 
 // The trigger_type allow-list.
 //
-// CONFIRMED LOWER BOUND ONLY. These six are the distinct values present across
-// all 799 live rows AND the reconstructed fragments_trigger_type_check IN list
-// in db/supabase-schema.sql. The REAL constraint definition could not be read
-// from the catalog (no service-role key / no direct Postgres to Supabase), so
-// it may already permit more values. See TRIGGER_TYPES_MATCHER_ONLY below.
-export const TRIGGER_TYPES_CONFIRMED = Object.freeze([
+// CONFIRMED from the live catalog — this is the exact IN list of the
+// fragments_trigger_type_check constraint on the Supabase table (read from the
+// dashboard, not reconstructed from data). A trigger_type outside this set is
+// rejected by Postgres with 23514/check_violation, so the importer refuses it
+// up front. Widening this list requires an ALTER of the CHECK in the dashboard
+// first, then editing this array to match.
+//
+// NOTE: several of these have NO branch in lib/matcher.ts (dasha, planet_nakshatra,
+// house_lord, yoga) and the matcher implements names the CHECK does NOT allow
+// (mahadasha, antardasha, planet_in_nakshatra, house_lord_in_house,
+// planet_dignity). That divergence is documented in the mismatch report and is
+// a matcher concern, not an import-validation one — the DB CHECK is the sole
+// authority for what may be written.
+export const TRIGGER_TYPES = Object.freeze([
+  "planet_in_sign",
+  "planet_in_house",
   "ascendant_sign",
+  "planet_in_sign_and_house",
   "conjunction",
   "moon_nakshatra",
-  "planet_in_house",
-  "planet_in_sign",
-  "planet_in_sign_and_house",
-])
-
-// Trigger types lib/matcher.ts already IMPLEMENTS but which have ZERO rows
-// today, so they are NOT in the data-derived list above. If the live CHECK is a
-// closed IN list matching only the confirmed six, inserting any of these WILL
-// be rejected by Postgres (error 23514/check_violation) until the constraint is
-// widened in the dashboard. The importer rejects them by default and only
-// allows them when you pass --allow-unconfirmed-triggers (after you've widened
-// the CHECK). This is exactly the gate you asked about for the deep-content
-// import (mahadasha / antardasha / planet_in_nakshatra).
-export const TRIGGER_TYPES_MATCHER_ONLY = Object.freeze([
-  "planet_in_nakshatra",
-  "mahadasha",
-  "antardasha",
-  "house_lord_in_house",
-  "planet_dignity",
+  "planet_nakshatra",
+  "dasha",
+  "house_lord",
+  "yoga",
 ])
 
 /** Columns the importer is allowed to write. `id` handled separately; the two
