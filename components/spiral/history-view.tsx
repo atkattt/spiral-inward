@@ -34,18 +34,24 @@ const TABS: { id: Stance; label: string }[] = [
 const BOND_ACCENT = "#d98a9a"
 const FALLBACK_ACCENT = "#8a8a8a"
 
-// Themes are LENSES (phases). Sections repeat across lenses, so a lens is the
-// natural heading a set of section stars group under. Bonds have no lens; they
-// gather in their own theme, shown last.
-const BONDS_THEME = "bonds"
+// Sections gather under a THEME heading, not under a raw lens. A theme is
+// DERIVED from a read's lens via LENS_THEME below: vedic and vedic_deep are the
+// SAME theme ("Vedic") — a deep pass is more of the same lens, not a new
+// heading. Bonds have no lens; they gather in their own theme, shown last.
+//
+// LENS_THEME is a deliberate stand-in for a future `theme` column on the lens
+// table. Everything downstream groups and sorts on the theme's KEY (never the
+// lens slug), so when that column lands, only this map is swapped for a lookup
+// and nothing else in history has to change.
 const UNFILED_SECTION = "unfiled"
 
-// The lenses we know how to order + label; unknown lenses fall in after these,
-// alphabetically, and are labelled by de-slugging.
-const LENS_ORDER = ["vedic", "vedic_deep"] as const
-const LENS_LABELS: Record<string, string> = {
-  vedic: "vedic",
-  vedic_deep: "vedic · deep",
+type Theme = { key: string; label: string; rank: number }
+
+const BONDS_THEME: Theme = { key: "bonds", label: "bonds", rank: 1000 }
+
+const LENS_THEME: Record<string, Theme> = {
+  vedic: { key: "vedic", label: "Vedic", rank: 0 },
+  vedic_deep: { key: "vedic", label: "Vedic", rank: 0 },
 }
 
 /** Normalize a read's lens the same way the rest of the app does (blank →
@@ -55,8 +61,16 @@ function lensKeyOf(read: Read): string {
   return l || "vedic"
 }
 
-function lensLabel(key: string): string {
-  return LENS_LABELS[key] ?? key.replace(/_/g, " ")
+/** The theme heading a lens belongs to. Unknown lenses become their own theme,
+    labelled by de-slugging and sorted after the known ones. */
+function themeOf(lensKey: string): Theme {
+  return (
+    LENS_THEME[lensKey] ?? {
+      key: lensKey,
+      label: lensKey.replace(/_/g, " "),
+      rank: 500,
+    }
+  )
 }
 
 /** The accent a read carries everywhere: its section color, same as its star
@@ -78,18 +92,14 @@ type SectionGroup = {
 }
 
 type ThemeGroup = {
-  /** lens slug, or the bonds sentinel */
+  /** theme key (from themeOf), or the bonds sentinel */
   key: string
   label: string
+  /** sort order carried from the theme */
+  rank: number
   /** total reads across the theme's sections */
   count: number
   sections: SectionGroup[]
-}
-
-const themeRank = (key: string): number => {
-  if (key === BONDS_THEME) return 1000
-  const i = (LENS_ORDER as readonly string[]).indexOf(key)
-  return i === -1 ? 500 : i
 }
 
 const sectionRank = (key: string): number => {
@@ -137,31 +147,37 @@ export function HistoryView() {
     [agreed, disagreed],
   )
 
-  // Group the (already stance-filtered) entries by lens → section.
+  // Group the (already stance-filtered) entries by theme → section. Keyed on
+  // the THEME (themeOf), so lenses that share a theme — vedic and vedic_deep —
+  // merge into one heading, and a section answered in both passes collapses
+  // into a single star holding all its reads.
   const themes = useMemo<ThemeGroup[]>(() => {
-    const byTheme = new Map<string, Map<string, Entry[]>>()
+    const byTheme = new Map<
+      string,
+      { theme: Theme; sections: Map<string, Entry[]> }
+    >()
     for (const e of entries) {
       const { read } = e
       const isBond = read.category === "bond"
-      const themeKey = isBond ? BONDS_THEME : lensKeyOf(read)
+      const theme = isBond ? BONDS_THEME : themeOf(lensKeyOf(read))
       const sectionKey = isBond
-        ? read.subjectName ?? BONDS_THEME
+        ? read.subjectName ?? BONDS_THEME.key
         : sectionOf(read.section) ?? UNFILED_SECTION
 
-      let sections = byTheme.get(themeKey)
-      if (!sections) byTheme.set(themeKey, (sections = new Map()))
-      const list = sections.get(sectionKey)
+      let bucket = byTheme.get(theme.key)
+      if (!bucket) byTheme.set(theme.key, (bucket = { theme, sections: new Map() }))
+      const list = bucket.sections.get(sectionKey)
       if (list) list.push(e)
-      else sections.set(sectionKey, [e])
+      else bucket.sections.set(sectionKey, [e])
     }
 
-    return [...byTheme.entries()]
-      .map<ThemeGroup>(([themeKey, sections]) => {
+    return [...byTheme.values()]
+      .map<ThemeGroup>(({ theme, sections }) => {
         const sectionGroups = [...sections.entries()]
           .map<SectionGroup>(([sectionKey, list]) => {
             const first = list[0].read
             const accent =
-              themeKey === BONDS_THEME
+              theme.key === BONDS_THEME.key
                 ? BOND_ACCENT
                 : sectionKey === UNFILED_SECTION
                   ? FALLBACK_ACCENT
@@ -171,9 +187,9 @@ export function HistoryView() {
           })
           .sort((a, b) => sectionRank(a.key) - sectionRank(b.key) || a.key.localeCompare(b.key))
         const count = sectionGroups.reduce((n, s) => n + s.entries.length, 0)
-        return { key: themeKey, label: lensLabel(themeKey), count, sections: sectionGroups }
+        return { key: theme.key, label: theme.label, rank: theme.rank, count, sections: sectionGroups }
       })
-      .sort((a, b) => themeRank(a.key) - themeRank(b.key) || a.key.localeCompare(b.key))
+      .sort((a, b) => a.rank - b.rank || a.key.localeCompare(b.key))
   }, [entries])
 
   function toggle(key: string) {
@@ -319,7 +335,7 @@ export function HistoryView() {
                               textShadow: `0 0 10px ${sec.accent}66`,
                             }}
                           >
-                            {theme.key === BONDS_THEME ? "\u2661" : "\u2726"}
+                            {theme.key === BONDS_THEME.key ? "\u2661" : "\u2726"}
                           </span>
                           <span
                             style={{
